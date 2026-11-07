@@ -48,10 +48,9 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 - **Acciones masivas**: Liberar, Posponer, Cerrar (consulta resuelta) y Enviar
   mensaje. Los chats que salen bien se desmarcan; los que fallan quedan
   seleccionados para reintentar.
-- **Posponer todo** busca en la lista actual los chats cuyo ultimo mensaje empieza
-  con tu saludo, sin abrirlos, y muestra cuales encontro. Al confirmar los pospone
-  4 horas, verificando antes en cada chat que lo ultimo siga siendo ese saludo y
-  que lo haya escrito una persona. Si el cliente respondio, lo saltea.
+- **Posponer todo** recorre la lista actual: tras confirmar, abre cada chat y
+  pospone 4 horas los que terminan con tu saludo escrito por una persona. Los
+  demas quedan igual. Posponer solo existe en chats asignados.
 - **Regla** "si el mensaje contiene X, responder Y", que deja el texto escrito o
   lo envia segun el toggle. Funciona con el panel cerrado y tras recargar.
 - **Atajos** para liberar, posponer y cerrar la conversacion abierta.
@@ -77,6 +76,8 @@ los mismos nodos se reciclan para mostrar otras conversaciones. Por eso:
 
 - Una conversacion se identifica siempre por el id de su fila, nunca por una
   referencia guardada al nodo.
+- La lista vuelve sola arriba, asi que la fila del chat abierto puede no estar
+  renderizada. La conversacion abierta se identifica por la URL (`#/chats/<id>`).
 - Para llegar a una conversacion fuera de pantalla se scrollea la lista hasta
   encontrarla. Si no aparece (se cerro o cambiaste de vista), ese chat falla con
   un mensaje y el lote sigue.

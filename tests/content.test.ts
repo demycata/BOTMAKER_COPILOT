@@ -118,11 +118,22 @@ describe('reglas', () => {
     expect(fake.composer.value).toBe('mi borrador');
   });
 
+  it('reconoce el chat por la URL aunque su fila este fuera de pantalla', async () => {
+    installChrome({ rules: [advisorRule(true)], rulesEnabled: true });
+    const fake = mountFakeBotmaker({ messages: asksForAdvisor });
+    fake.openNow('chat-1');
+    fake.scroller.scrollTop = 500;
+    await startContent();
+    await vi.waitFor(() => expect(fake.state.sent).toHaveLength(1), { timeout: 3000 });
+    expect(fake.state.sent[0].chatId).toBe('chat-1');
+  });
+
   it('no se dispara si no sabe en que conversacion esta', async () => {
     installChrome({ rules: [advisorRule(true)], rulesEnabled: true });
     const fake = mountFakeBotmaker({ messages: asksForAdvisor });
     fake.openNow('chat-1');
     fake.scroller.scrollTop = 500; // la fila abierta sale de pantalla antes de arrancar
+    window.location.hash = '';
     await startContent();
     await settle(1200);
     expect(fake.state.sent).toEqual([]);

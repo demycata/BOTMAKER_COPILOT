@@ -16,6 +16,10 @@ export interface FakeOptions {
   threadDelay?: number;
   /** Mensajes de cada chat; por defecto un saludo distinto por chat. */
   messages?: (id: string) => FakeMessage[];
+  /** Al abrir, el hilo anterior desaparece antes de que llegue el nuevo. */
+  clearsThreadOnOpen?: boolean;
+  /** Como en Botmaker: al abrir un chat la lista puede volver sola arriba. */
+  listJumpsOnOpen?: boolean;
 }
 
 const ROW_HEIGHT = 50;
@@ -26,6 +30,7 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     options.messages ?? ((id: string): FakeMessage[] => [{ from: 'client', text: `Hola desde ${id}` }]);
 
   Element.prototype.scrollIntoView = () => undefined;
+  window.location.hash = '';
   document.body.innerHTML = `
     <div class="ReactVirtualized__Grid customers-list">
       <div class="ReactVirtualized__Grid__innerScrollContainer"></div>
@@ -76,10 +81,7 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     const row = document.createElement('div');
     row.innerHTML = `
       <div class="customer-item">
-        <div class="customer-main" role="button">
-          <span class="customer-name"></span>
-          <div class="customer-last-message"></div>
-        </div>
+        <div class="customer-main" role="button"><span class="customer-name"></span></div>
       </div>`;
     row.querySelector('.customer-main')!.addEventListener('click', () => {
       if (!state.brokenOpen) open(row.id);
@@ -101,7 +103,6 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
       row.id = id;
       row.style.top = `${(first + i) * ROW_HEIGHT}px`;
       row.querySelector('.customer-name')!.textContent = `Cliente ${id.slice(5)}`;
-      row.querySelector('.customer-last-message')!.textContent = messages(id).at(-1)?.text ?? '';
       row.querySelector('.customer-item')!.classList.toggle('selected', state.openId === id);
     });
   }
@@ -138,6 +139,9 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     state.opened.push(id);
     setTimeout(() => {
       state.openId = id;
+      window.location.hash = `#/chats/${id}`;
+      if (options.listJumpsOnOpen) top = 0;
+      if (options.clearsThreadOnOpen) thread.replaceChildren();
       render();
       setTimeout(() => renderThread(id), threadDelay);
     }, openDelay);
@@ -172,7 +176,7 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
 
   function postponeOpenChat(): void {
     state.postponed.push(state.openId);
-    ids.splice(ids.indexOf(state.openId!), 1); // el chat pospuesto sale de la lista
+    ids.splice(ids.indexOf(state.openId!), 1); // sale de la lista; la URL no cambia
     state.openId = null;
     thread.replaceChildren();
     closeMenus();
@@ -216,11 +220,10 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     /** Abre un chat como lo haria el operador. */
     openNow(id: string) {
       state.openId = id;
+      window.location.hash = `#/chats/${id}`;
       render();
       renderThread(id);
     },
-    /** Vuelve a pintar la lista, por ejemplo tras llegar un mensaje nuevo. */
-    refreshList: render,
     checkboxFor: (id: string) =>
       document.getElementById(id)?.querySelector<HTMLInputElement>('.cbm-select-checkbox') ?? null,
   };

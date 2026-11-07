@@ -50,14 +50,7 @@ export function listChats(): ChatRef[] {
       const nameEl = queryFirst<HTMLElement>(SELECTORS.chatName, row);
       const name = (nameEl?.textContent ?? '').trim().slice(0, 80) || '(sin nombre)';
       const top = parseFloat(row.style.top);
-      const preview = queryFirst<HTMLElement>(SELECTORS.chatLastMessage, row);
-      return {
-        id: row.id,
-        name,
-        el: row,
-        offset: Number.isFinite(top) ? top : row.offsetTop,
-        lastMessage: preview ? cleanText(preview) : undefined,
-      };
+      return { id: row.id, name, el: row, offset: Number.isFinite(top) ? top : row.offsetTop };
     });
 }
 
@@ -156,9 +149,26 @@ function isOpenRow(row: HTMLElement): boolean {
   return row.matches(anyOf(SELECTORS.chatSelected)) || !!queryFirst(SELECTORS.chatSelected, row);
 }
 
-/** Conversacion abierta, si su fila esta renderizada. */
+/**
+ * Id de la conversacion abierta segun la URL de la ventana principal. Es la
+ * fuente confiable: la lista vuelve sola arriba, asi que la fila del chat abierto
+ * puede no estar renderizada. Tras posponer un chat la URL no cambia, por eso hay
+ * que mirar tambien si su hilo esta cargado.
+ */
+function openChatIdFromUrl(): string | null {
+  try {
+    return window.top?.location.hash.match(/^#\/chats\/([^/?]+)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Conversacion abierta. Sin datos en la URL, la busca entre las filas renderizadas. */
 export function openChatRef(): ChatRef | null {
-  return listChats().find((c) => c.el && isOpenRow(c.el)) ?? null;
+  const chats = listChats();
+  const id = openChatIdFromUrl();
+  if (id) return chats.find((c) => c.id === id) ?? { id, name: '(chat abierto)' };
+  return chats.find((c) => c.el && isOpenRow(c.el)) ?? null;
 }
 
 /** Huella del hilo visible, para detectar que realmente cargo otra conversacion. */
@@ -173,22 +183,29 @@ function threadSignature(): string {
  */
 export async function openChat(chat: ChatRef): Promise<void> {
   const row = await revealRow(chat);
-  if (isOpenRow(row)) {
+  const thread = threadSignature();
+  const firstBubble = document.querySelector(anyOf(SELECTORS.messageItem));
+  if (thread && openChatRef()?.id === chat.id) {
     await waitForIdle(200);
     return;
   }
 
-  const thread = threadSignature();
   click(queryFirst<HTMLElement>(SELECTORS.chatOpen, row) ?? row);
 
   await waitUntil(() => openChatRef()?.id === chat.id, {
     timeout: 6000,
     what: 'que se abra la conversacion',
   });
-  await waitUntil(() => threadSignature() !== thread, {
-    timeout: 4000,
-    what: 'que cargue el hilo de la conversacion',
-  });
+  // Un hilo vacio todavia no cargo. Dos chats pueden tener el mismo texto, por eso
+  // tambien cuenta que las burbujas sean otras.
+  await waitUntil(
+    () => {
+      const now = threadSignature();
+      const replaced = document.querySelector(anyOf(SELECTORS.messageItem)) !== firstBubble;
+      return !!now && (now !== thread || replaced);
+    },
+    { timeout: 4000, what: 'que cargue el hilo de la conversacion' },
+  );
   await waitForIdle(300);
 }
 

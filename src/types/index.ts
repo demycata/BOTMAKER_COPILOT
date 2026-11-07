@@ -10,8 +10,6 @@ export interface ChatRef {
   el?: HTMLElement;
   /** Posicion vertical en la lista, pista para volver a encontrarla al scrollear. */
   offset?: number;
-  /** Ultimo mensaje que muestra la fila en la lista. */
-  lastMessage?: string;
 }
 
 /** Acciones masivas disponibles. Cada una se mapea a un handler en el adapter. */

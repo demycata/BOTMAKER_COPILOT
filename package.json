@@ -1,6 +1,6 @@
 {
   "name": "copilot-botmaker",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Copiloto para operadores de Botmaker: seleccion multiple, acciones masivas y motor de reglas. Opera sobre el DOM, sin API de Botmaker.",
   "type": "module",
   "scripts": {

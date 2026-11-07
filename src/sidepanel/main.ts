@@ -36,7 +36,6 @@ const postponeAllBtn = $<HTMLButtonElement>('postpone-all');
 const postponeModal = $('postpone-modal');
 const postponeTitle = $('postpone-title');
 const postponeNote = $('postpone-note');
-const postponeList = $<HTMLUListElement>('postpone-list');
 const postponeConfirmBtn = $<HTMLButtonElement>('postpone-confirm');
 const postponeCancelBtn = $<HTMLButtonElement>('postpone-cancel');
 const runDiagBtn = $<HTMLButtonElement>('run-diag');
@@ -114,30 +113,23 @@ postponeAllBtn.addEventListener('click', async () => {
   }
   await set('postponeGreeting', greeting);
   setBulkRunning(true, false);
-  addLog('Buscando chats con tu saludo…');
+  addLog('Recorriendo la lista de chats…');
   if (!(await sendToContent({ kind: 'postpone:scan', greeting }))) {
     setBulkRunning(false);
     addLog(NOT_CONNECTED, 'fail');
   }
 });
 
-function showPostponePreview(names: string[], total: number, complete: boolean): void {
+function showPostponePreview(total: number, complete: boolean): void {
   setBulkRunning(false);
-  if (!names.length) {
-    addLog(`Ninguno de los ${total} chats tiene tu saludo como ultimo mensaje.`);
+  if (!total) {
+    addLog('No hay chats en la lista.');
     return;
   }
-  postponeTitle.textContent = `Posponer ${names.length} de ${total} chats`;
-  postponeNote.textContent = complete
-    ? 'Su ultimo mensaje es tu saludo. Se pospondran 4 horas.'
-    : 'Su ultimo mensaje es tu saludo. Se pospondran 4 horas. La lista es muy larga: puede haber mas.';
-  postponeList.replaceChildren(
-    ...names.map((name) => {
-      const li = document.createElement('li');
-      li.textContent = name;
-      return li;
-    }),
-  );
+  const note =
+    'Se abre cada chat y se posponen 4 horas los que terminan con tu saludo. Los demas quedan igual.';
+  postponeTitle.textContent = `Revisar ${total} chats`;
+  postponeNote.textContent = complete ? note : `${note} La lista es muy larga: puede haber mas.`;
   postponeModal.classList.remove('hidden');
   postponeCancelBtn.focus();
 }
@@ -290,7 +282,7 @@ chrome.runtime.onMessage.addListener((envelope: Envelope, sender) => {
       break;
     case 'postpone:preview':
       postponeTabId = sender.tab?.id;
-      showPostponePreview(msg.names, msg.total, msg.complete);
+      showPostponePreview(msg.total, msg.complete);
       break;
     case 'bulk:rejected':
       setBulkRunning(false);
@@ -323,10 +315,10 @@ function paintProgress(p: BulkProgress): void {
     const ok = p.done - p.failed - p.skipped;
     progressLabel.textContent = `${title}: ${ok} ok${skipped}, ${p.failed} con error de ${p.total}.`;
     setBulkRunning(false);
-    // Volcar al log lo que no se hizo.
+    // Volcar errores al log. Los salteados ya figuran en el resumen.
     p.results
-      .filter((r) => !r.ok)
-      .forEach((r) => addLog(`${r.chatName}: ${r.error}`, r.skipped ? '' : 'fail'));
+      .filter((r) => !r.ok && !r.skipped)
+      .forEach((r) => addLog(`${r.chatName}: ${r.error}`, 'fail'));
   } else {
     progressLabel.textContent = `Procesando ${p.done}/${p.total}${p.currentChatName ? ` — ${p.currentChatName}` : ''}`;
   }

@@ -95,37 +95,19 @@ function mountWithGreetings(overrides: Record<string, FakeMessage[]> = {}) {
   });
 }
 
-describe('buscar', () => {
-  it('encuentra los chats con el saludo, tambien fuera de pantalla, sin abrir ninguno', async () => {
+describe('antes de confirmar', () => {
+  it('cuenta los chats de la lista, tambien fuera de pantalla, sin abrir ninguno', async () => {
     const fake = mountWithGreetings();
     await startContent();
     await scan();
-    expect(preview()).toMatchObject({
-      names: ['Cliente 1', 'Cliente 4'],
-      total: 6,
-      complete: true,
-    });
+    expect(preview()).toMatchObject({ total: 6, complete: true });
     expect(fake.state.opened).toEqual([]);
-  });
-
-  it('no pospone nada hasta que se confirme', async () => {
-    const fake = mountWithGreetings();
-    await startContent();
-    await scan();
-    await new Promise((r) => setTimeout(r, 300));
     expect(fake.state.postponed).toEqual([]);
-  });
-
-  it('avisa si no encuentra ninguno', async () => {
-    mountFakeBotmaker({ chats: 3, visible: 3 });
-    await startContent();
-    await scan();
-    expect(preview()).toMatchObject({ names: [], total: 3 });
   });
 });
 
-describe('confirmar', () => {
-  it('pospone solo los que cumplen, y solo abre esos', async () => {
+describe('al confirmar', () => {
+  it('abre chat por chat y pospone solo los que cumplen', async () => {
     const fake = mountWithGreetings();
     await startContent();
     await scan();
@@ -134,28 +116,42 @@ describe('confirmar', () => {
     const result = await finished();
 
     expect(fake.state.postponed).toEqual(['chat-1', 'chat-4']);
-    expect(fake.state.opened).toEqual(['chat-1', 'chat-4']);
-    expect(result).toMatchObject({ total: 2, failed: 0, skipped: 0 });
+    expect(fake.state.opened).toHaveLength(6);
+    expect(result).toMatchObject({ total: 6, failed: 0, skipped: 4 });
   }, 30000);
 
-  it('saltea un chat si el cliente respondio despues de la busqueda', async () => {
-    const overrides: Record<string, FakeMessage[]> = {};
-    const fake = mountWithGreetings(overrides);
+  it('sigue funcionando si la lista vuelve sola arriba en cada chat', async () => {
+    const fake = mountFakeBotmaker({
+      chats: 6,
+      visible: 3,
+      listJumpsOnOpen: true,
+      messages: (id) => [{ from: 'agent', text: id === 'chat-5' ? GREETING : 'otro mensaje' }],
+    });
     await startContent();
     await scan();
-    overrides['chat-4'] = [
-      { from: 'agent', text: GREETING },
-      { from: 'client', text: 'necesito un turno' },
-    ];
     send({ kind: 'postpone:confirm', postponePath: POSTPONE_PATH });
 
     const result = await finished();
 
-    expect(fake.state.postponed).toEqual(['chat-1']);
-    expect(result).toMatchObject({ failed: 0, skipped: 1 });
+    expect(fake.state.postponed).toEqual(['chat-5']);
+    expect(result).toMatchObject({ failed: 0, skipped: 5 });
   }, 30000);
 
-  it('saltea un chat si el saludo lo mando el bot', async () => {
+  it('no pospone si el cliente respondio despues del saludo', async () => {
+    const fake = mountWithGreetings({
+      'chat-4': [
+        { from: 'agent', text: GREETING },
+        { from: 'client', text: 'necesito un turno' },
+      ],
+    });
+    await startContent();
+    await scan();
+    send({ kind: 'postpone:confirm', postponePath: POSTPONE_PATH });
+    await finished();
+    expect(fake.state.postponed).toEqual(['chat-1']);
+  }, 30000);
+
+  it('no pospone si el saludo lo mando el bot', async () => {
     const fake = mountWithGreetings({ 'chat-1': [{ from: 'bot', text: GREETING }] });
     await startContent();
     await scan();

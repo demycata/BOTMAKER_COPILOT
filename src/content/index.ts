@@ -13,7 +13,6 @@ import { SelectionStore } from '@/core/selection-store';
 import { BulkRunner, SkipChat } from '@/core/bulk-runner';
 import { evaluate, RuleFireLog } from '@/core/rules-engine';
 import { comboFromEvent } from '@/core/shortcuts';
-import { startsWithText } from '@/core/text';
 import { debounceMax } from '@/core/timing';
 import * as bm from '@/adapters/botmaker/actions';
 import { SELECTORS } from '@/adapters/botmaker/selectors';
@@ -52,7 +51,7 @@ const selection = new SelectionStore();
 async function runGuardedAction(actionId: BulkActionId, params?: BulkActionParams): Promise<void> {
   const required = params?.requireLastMessage;
   if (required && !bm.lastMessageIsOperatorText(required)) {
-    throw new SkipChat('Ya no cumple: el ultimo mensaje no es tu saludo');
+    throw new SkipChat('El ultimo mensaje no es tu saludo');
   }
   await bm.runAction(actionId, params);
 }
@@ -189,10 +188,7 @@ async function runBulk(actionId: BulkActionId, params?: BulkActionParams): Promi
 
 // --- Posponer todo ---
 
-/**
- * Busca los chats cuyo ultimo mensaje es el saludo. Usa lo que muestra la lista,
- * asi no abre ningun chat ni los marca como leidos.
- */
+/** Junta los chats de la lista, para confirmar antes de abrirlos uno por uno. */
 async function scanForPostpone(greeting: string): Promise<void> {
   if (isBusy()) {
     sendToPanel({ kind: 'bulk:rejected', reason: 'Ya hay un proceso en curso.' });
@@ -201,16 +197,9 @@ async function scanForPostpone(greeting: string): Promise<void> {
   scanning = true;
   try {
     const { chats, complete } = await bm.collectAllChats();
-    postponeCandidates = chats
-      .filter((c) => startsWithText(c.lastMessage ?? '', greeting))
-      .map(({ id, name, offset }) => ({ id, name, offset }));
+    postponeCandidates = chats.map(({ id, name, offset }) => ({ id, name, offset }));
     postponeGreeting = greeting;
-    sendToPanel({
-      kind: 'postpone:preview',
-      names: postponeCandidates.map((c) => c.name),
-      total: chats.length,
-      complete,
-    });
+    sendToPanel({ kind: 'postpone:preview', total: chats.length, complete });
   } catch (err) {
     sendToPanel({ kind: 'bulk:rejected', reason: (err as Error).message });
   } finally {

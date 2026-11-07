@@ -30,7 +30,7 @@ export type ContentToPanel =
   | { kind: 'selection:changed'; count: number; total: number }
   | { kind: 'bulk:progress'; progress: BulkProgress }
   | { kind: 'bulk:rejected'; reason: string }
-  | { kind: 'postpone:preview'; names: string[]; total: number; complete: boolean }
+  | { kind: 'postpone:preview'; total: number; complete: boolean }
   | { kind: 'rule:fired'; ruleName: string; chatName: string }
   | { kind: 'diag:result'; report: DiagnosticReport }
   | { kind: 'log'; text: string };

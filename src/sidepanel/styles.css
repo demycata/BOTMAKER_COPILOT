@@ -233,17 +233,6 @@ body {
   margin: 0 0 8px;
   font-size: 14px;
 }
-.modal-list {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  overflow-y: auto;
-  font-size: 12px;
-}
-.modal-list li {
-  padding: 5px 0;
-  border-bottom: 1px solid var(--border);
-}
 
 .hidden {
   display: none !important;

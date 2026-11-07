@@ -198,8 +198,8 @@ describe('estado', () => {
 });
 
 describe('posponer todo', () => {
-  const previewFrom = (names: string[], total = 7, complete = true, tabId = 7) =>
-    receive({ kind: 'postpone:preview', names, total, complete }, tabId);
+  const previewFrom = (total = 7, complete = true, tabId = 7) =>
+    receive({ kind: 'postpone:preview', total, complete }, tabId);
   const modalOpen = () => !$('postpone-modal').classList.contains('hidden');
 
   it('trae el saludo cargado y lo busca en la lista', async () => {
@@ -244,29 +244,28 @@ describe('posponer todo', () => {
     expect($<HTMLButtonElement>('postpone-all').disabled).toBe(false);
   });
 
-  it('pide confirmacion mostrando cuantos y cuales', async () => {
+  it('pide confirmacion antes de abrir los chats', async () => {
     await startPanel();
     $('postpone-all').click();
     await flush();
-    previewFrom(['Ana', '<b>Luis</b>']);
+    previewFrom(7);
 
     expect(modalOpen()).toBe(true);
-    expect($('postpone-title').textContent).toBe('Posponer 2 de 7 chats');
-    expect($('postpone-list').textContent).toContain('<b>Luis</b>'); // texto, no HTML
-    expect($('postpone-list').querySelector('b')).toBeNull();
+    expect($('postpone-title').textContent).toBe('Revisar 7 chats');
+    expect($('postpone-note').textContent).toContain('4 horas');
     expect($<HTMLButtonElement>('postpone-all').disabled).toBe(false);
     expect(sent.some((s) => s.payload.kind === 'postpone:confirm')).toBe(false);
   });
 
   it('avisa si la lista era demasiado larga para recorrerla entera', async () => {
     await startPanel();
-    previewFrom(['Ana'], 300, false);
+    previewFrom(300, false);
     expect($('postpone-note').textContent).toContain('puede haber mas');
   });
 
   it('confirmar pospone 4 horas en la pestania de la busqueda', async () => {
     await startPanel();
-    previewFrom(['Ana'], 7, true, 42);
+    previewFrom(7, true, 42);
     $('postpone-confirm').click();
     await flush();
     expect(modalOpen()).toBe(false);
@@ -278,7 +277,7 @@ describe('posponer todo', () => {
 
   it('cancelar cierra sin posponer', async () => {
     await startPanel();
-    previewFrom(['Ana']);
+    previewFrom();
     $('postpone-cancel').click();
     await flush();
     expect(modalOpen()).toBe(false);
@@ -286,13 +285,13 @@ describe('posponer todo', () => {
     expect(logText()).toContain('no se toco ningun chat');
   });
 
-  it('sin coincidencias no abre la ventana', async () => {
+  it('con la lista vacia no abre la ventana', async () => {
     await startPanel();
     $('postpone-all').click();
     await flush();
-    previewFrom([], 7);
+    previewFrom(0);
     expect(modalOpen()).toBe(false);
-    expect(logText()).toContain('Ninguno de los 7 chats');
+    expect(logText()).toContain('No hay chats en la lista.');
     expect($<HTMLButtonElement>('postpone-all').disabled).toBe(false);
   });
 
@@ -310,12 +309,12 @@ describe('posponer todo', () => {
         cancelled: false,
         results: [
           { chatId: 'a', chatName: 'Ana', ok: true },
-          { chatId: 'b', chatName: 'Luis', ok: false, skipped: true, error: 'Ya no cumple' },
+          { chatId: 'b', chatName: 'Luis', ok: false, skipped: true, error: 'No es tu saludo' },
         ],
       },
     });
     expect($('progress-label').textContent).toBe('Listo: 1 ok, 1 salteados, 0 con error de 2.');
-    expect(logText()).toContain('Luis: Ya no cumple');
+    expect(logText()).not.toContain('Luis');
     expect($('log').querySelector('.fail')).toBeNull();
   });
 });

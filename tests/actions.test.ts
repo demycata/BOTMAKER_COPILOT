@@ -47,6 +47,43 @@ describe('openChat', () => {
     expect(bm.lastIncomingMessage()).toBe('Hola desde chat-2');
   });
 
+  it('no da por cargado un hilo que todavia esta vacio', async () => {
+    const fake = mountFakeBotmaker({ threadDelay: 600, clearsThreadOnOpen: true });
+    fake.openNow('chat-1');
+    await bm.openChat({ id: 'chat-2', name: 'x' });
+    expect(bm.lastIncomingMessage()).toBe('Hola desde chat-2');
+  });
+
+  it('reconoce el cambio entre dos chats con el mismo contenido', async () => {
+    const fake = mountFakeBotmaker({ messages: () => [{ from: 'agent', text: 'igual' }] });
+    fake.openNow('chat-1');
+    await expect(bm.openChat({ id: 'chat-2', name: 'x' })).resolves.toBeUndefined();
+    expect(fake.state.openId).toBe('chat-2');
+  });
+
+  it('confirma por la URL aunque la lista vuelva sola arriba al abrir', async () => {
+    const fake = mountFakeBotmaker({ chats: 12, visible: 4, listJumpsOnOpen: true });
+    await bm.openChat({ id: 'chat-10', name: 'x' });
+    expect(fake.state.openId).toBe('chat-10');
+    expect(document.getElementById('chat-10')).toBeNull(); // su fila ya no esta en pantalla
+    expect(bm.openChatRef()?.id).toBe('chat-10');
+  });
+
+  it('sin datos en la URL usa la fila marcada', () => {
+    const fake = mountFakeBotmaker();
+    fake.openNow('chat-1');
+    window.location.hash = '';
+    expect(bm.openChatRef()?.id).toBe('chat-1');
+  });
+
+  it('vuelve a abrir un chat si la URL lo muestra pero su hilo esta vacio', async () => {
+    const fake = mountFakeBotmaker();
+    fake.openNow('chat-1');
+    fake.thread.replaceChildren();
+    await bm.openChat({ id: 'chat-1', name: 'x' });
+    expect(fake.state.opened).toEqual(['chat-1']);
+  });
+
   it('no reabre la conversacion que ya esta abierta', async () => {
     const fake = mountFakeBotmaker();
     fake.openNow('chat-1');

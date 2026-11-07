@@ -29,9 +29,6 @@ export const SELECTORS = {
   /** Elemento clickeable que abre la conversacion (evita los de sesiones). */
   chatOpen: ['.customer-item > .customer-main[role="button"]', '.customer-main[role="button"]'],
 
-  /** Ultimo mensaje que muestra la fila, sin necesidad de abrir el chat. */
-  chatLastMessage: ['.customer-last-message'],
-
   /** Marca de la fila actualmente abierta/seleccionada. */
   chatSelected: ['.customer-item.selected'],
 

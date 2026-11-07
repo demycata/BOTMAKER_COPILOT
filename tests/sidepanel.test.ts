@@ -319,6 +319,83 @@ describe('posponer todo', () => {
   });
 });
 
+describe('cerrar todos', () => {
+  const previewFrom = (count: number, total = 9, complete = true, tabId = 7) =>
+    receive({ kind: 'close:preview', count, total, complete }, tabId);
+  const modalOpen = () => !$('close-modal').classList.contains('hidden');
+
+  it('trae cargado el mensaje completo', async () => {
+    await startPanel();
+    const text = $<HTMLTextAreaElement>('close-message').value;
+    expect(text.startsWith('¡Veo que no estás por ahi! 🧐\nVoy a cerrar el chat')).toBe(true);
+    expect(text.endsWith('*Hablar con un asesor*\n\n¡Saludos!')).toBe(true);
+  });
+
+  it('recuerda un mensaje editado', async () => {
+    await startPanel({ closeMessage: 'Otro cierre' });
+    expect($<HTMLTextAreaElement>('close-message').value).toBe('Otro cierre');
+  });
+
+  it('busca sin enviar nada todavia', async () => {
+    await startPanel();
+    $('close-all').click();
+    await flush();
+    expect(sent.at(-1)?.payload).toEqual({ kind: 'close:scan' });
+    expect($<HTMLButtonElement>('close-all').disabled).toBe(true);
+  });
+
+  it('no busca sin mensaje', async () => {
+    await startPanel();
+    $<HTMLTextAreaElement>('close-message').value = ' ';
+    $('close-all').click();
+    await flush();
+    expect(sent.some((s) => s.payload.kind === 'close:scan')).toBe(false);
+  });
+
+  it('no queda trabado si la pestania no responde', async () => {
+    await startPanel();
+    connected = false;
+    $('close-all').click();
+    await flush();
+    expect($<HTMLButtonElement>('close-all').disabled).toBe(false);
+  });
+
+  it('pide confirmacion mostrando cuantos chats y el mensaje', async () => {
+    await startPanel();
+    previewFrom(3);
+    expect(modalOpen()).toBe(true);
+    expect($('close-title').textContent).toBe('Cerrar 3 de 9 chats');
+    expect($('close-preview').textContent).toContain('¡Saludos!');
+    expect(sent.some((s) => s.payload.kind === 'close:confirm')).toBe(false);
+  });
+
+  it('confirmar envia el mensaje a la pestania de la busqueda', async () => {
+    await startPanel();
+    $<HTMLTextAreaElement>('close-message').value = 'Chau';
+    previewFrom(3, 9, true, 42);
+    $('close-confirm').click();
+    await flush();
+    expect(modalOpen()).toBe(false);
+    expect(sent.at(-1)).toEqual({ payload: { kind: 'close:confirm', text: 'Chau' }, tabId: 42 });
+  });
+
+  it('cancelar cierra sin tocar nada', async () => {
+    await startPanel();
+    previewFrom(3);
+    $('close-cancel').click();
+    await flush();
+    expect(modalOpen()).toBe(false);
+    expect(sent.at(-1)?.payload).toEqual({ kind: 'close:discard' });
+  });
+
+  it('sin pospuestos no abre la ventana', async () => {
+    await startPanel();
+    previewFrom(0);
+    expect(modalOpen()).toBe(false);
+    expect(logText()).toContain('No hay chats pospuestos');
+  });
+});
+
 describe('diagnostico', () => {
   it('muestra el resultado en la actividad', async () => {
     await startPanel();

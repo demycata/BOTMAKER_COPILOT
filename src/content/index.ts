@@ -56,7 +56,15 @@ async function runGuardedAction(actionId: BulkActionId, params?: BulkActionParam
   await bm.runAction(actionId, params);
 }
 
-const bulk = new BulkRunner({ openChat: bm.openChat, runAction: runGuardedAction });
+/** Un chat marcado como pospuesto se saltea si dejo de estarlo, ej. porque respondio. */
+async function openGuardedChat(chat: ChatRef): Promise<void> {
+  if (chat.postponed && !(await bm.chatIsPostponed(chat))) {
+    throw new SkipChat('Ya no esta pospuesto');
+  }
+  await bm.openChat(chat);
+}
+
+const bulk = new BulkRunner({ openChat: openGuardedChat, runAction: runGuardedAction });
 const fireLog = new RuleFireLog();
 
 let selectionMode = false;
@@ -69,6 +77,7 @@ let scanning = false; // recorriendo la lista para "Todo"
 let ruleInFlight = false;
 let postponeCandidates: ChatRef[] = [];
 let postponeGreeting = '';
+let closeCandidates: ChatRef[] = [];
 
 // Con all_frames:true el content corre en varios frames (el principal y el
 // iframe "bmchildf" que tiene la app de chats). Solo el frame que realmente ve
@@ -215,6 +224,45 @@ async function confirmPostpone(postponePath: string[]): Promise<void> {
     return;
   }
   await bulk.run(chats, 'postpone', { postponePath, requireLastMessage: postponeGreeting }, (p) =>
+    sendToPanel({ kind: 'bulk:progress', progress: p }),
+  );
+}
+
+// --- Cerrar todos ---
+
+/** Busca los chats pospuestos de la lista, para confirmar antes de tocarlos. */
+async function scanForClose(): Promise<void> {
+  if (isBusy()) {
+    sendToPanel({ kind: 'bulk:rejected', reason: 'Ya hay un proceso en curso.' });
+    return;
+  }
+  scanning = true;
+  try {
+    const { chats, complete } = await bm.collectAllChats();
+    closeCandidates = chats
+      .filter((c) => c.postponed)
+      .map(({ id, name, offset }) => ({ id, name, offset, postponed: true }));
+    sendToPanel({
+      kind: 'close:preview',
+      count: closeCandidates.length,
+      total: chats.length,
+      complete,
+    });
+  } catch (err) {
+    sendToPanel({ kind: 'bulk:rejected', reason: (err as Error).message });
+  } finally {
+    scanning = false;
+  }
+}
+
+async function confirmClose(text: string): Promise<void> {
+  const chats = closeCandidates;
+  closeCandidates = [];
+  if (isBusy() || !chats.length) {
+    sendToPanel({ kind: 'bulk:rejected', reason: 'No hay chats para cerrar.' });
+    return;
+  }
+  await bulk.run(chats, 'sendAndRelease', { text }, (p) =>
     sendToPanel({ kind: 'bulk:progress', progress: p }),
   );
 }
@@ -409,6 +457,15 @@ chrome.runtime.onMessage.addListener((envelope: Envelope, _sender, sendResponse)
       break;
     case 'postpone:discard':
       postponeCandidates = [];
+      break;
+    case 'close:scan':
+      void scanForClose();
+      break;
+    case 'close:confirm':
+      void confirmClose(msg.text);
+      break;
+    case 'close:discard':
+      closeCandidates = [];
       break;
     case 'diag:run':
       sendToPanel({ kind: 'diag:result', report: bm.diagnose() });

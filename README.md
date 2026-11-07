@@ -51,6 +51,9 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 - **Posponer todo** recorre la lista actual: tras confirmar, abre cada chat y
   pospone 4 horas los que terminan con tu saludo escrito por una persona. Los
   demas quedan igual. Posponer solo existe en chats asignados.
+- **Cerrar todos** busca los chats pospuestos de la lista actual y, tras confirmar,
+  les envia el mensaje configurado y los libera. Si el mensaje no sale, no libera
+  ese chat. Si un chat dejo de estar pospuesto, lo saltea.
 - **Regla** "si el mensaje contiene X, responder Y", que deja el texto escrito o
   lo envia segun el toggle. Funciona con el panel cerrado y tras recargar.
 - **Atajos** para liberar, posponer y cerrar la conversacion abierta.

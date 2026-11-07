@@ -16,6 +16,8 @@ export interface FakeOptions {
   threadDelay?: number;
   /** Mensajes de cada chat; por defecto un saludo distinto por chat. */
   messages?: (id: string) => FakeMessage[];
+  /** Chats pospuestos: muestran la etiqueta y no ofrecen "Liberar". */
+  postponed?: string[];
   /** Al abrir, el hilo anterior desaparece antes de que llegue el nuevo. */
   clearsThreadOnOpen?: boolean;
   /** Como en Botmaker: al abrir un chat la lista puede volver sola arriba. */
@@ -48,6 +50,7 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
   const menuBtn = document.querySelector<HTMLElement>('[aria-label="Acciones de Chat"]')!;
 
   const ids = Array.from({ length: chats }, (_, i) => `chat-${i}`);
+  const holds = new Set(options.postponed ?? []);
   const state = {
     openId: null as string | null,
     /** Veces que se abrio un chat con un click en su fila. */
@@ -61,6 +64,8 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     brokenSend: false,
     /** Chat sin asignar: el mismo item del menu ofrece tomarlo, no liberarlo. */
     assigned: true,
+    /** Enviar un mensaje a un chat pospuesto lo vuelve a asignar. */
+    sendTakesChat: true,
   };
 
   let top = 0;
@@ -104,6 +109,12 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
       row.style.top = `${(first + i) * ROW_HEIGHT}px`;
       row.querySelector('.customer-name')!.textContent = `Cliente ${id.slice(5)}`;
       row.querySelector('.customer-item')!.classList.toggle('selected', state.openId === id);
+      row.querySelector('.customer-chip')?.remove();
+      if (holds.has(id)) {
+        const chip = document.createElement('div');
+        chip.className = 'customer-chip hold';
+        row.querySelector('.customer-item')!.append(chip);
+      }
     });
   }
 
@@ -150,6 +161,7 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
   sendBtn.addEventListener('click', () => {
     if (state.brokenSend) return;
     state.sent.push({ chatId: state.openId, text: composer.value });
+    if (state.sendTakesChat && state.openId) holds.delete(state.openId);
     const bubble = document.createElement('div');
     bubble.className = 'text-entry-right';
     bubble.textContent = composer.value;
@@ -183,13 +195,15 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     scroller.scrollTop = top;
   }
 
+  const canRelease = () => state.assigned && !(state.openId && holds.has(state.openId));
+
   menuBtn.addEventListener('click', () => {
-    const label = state.assigned ? 'Liberar chat asignado a Operador' : 'Tomar chat';
+    const label = canRelease() ? 'Liberar chat asignado a Operador' : 'Tomar chat';
     addMenu([
       {
         html: `<span id="ChatsToolbar.lockChat">${label}</span>`,
         onClick: () => {
-          if (state.assigned) state.released.push(state.openId);
+          if (canRelease()) state.released.push(state.openId);
           closeMenus();
         },
       },
@@ -223,6 +237,11 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
       window.location.hash = `#/chats/${id}`;
       render();
       renderThread(id);
+    },
+    /** Saca la marca de pospuesto, ej. porque el cliente respondio. */
+    clearHold(id: string) {
+      holds.delete(id);
+      render();
     },
     checkboxFor: (id: string) =>
       document.getElementById(id)?.querySelector<HTMLInputElement>('.cbm-select-checkbox') ?? null,

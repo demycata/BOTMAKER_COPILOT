@@ -9,6 +9,7 @@ interface StorageShape {
   rulesEnabled: boolean;
   shortcuts: Shortcut[];
   postponeGreeting: string;
+  closeMessage: string;
 }
 
 const DEFAULTS: StorageShape = {
@@ -16,6 +17,7 @@ const DEFAULTS: StorageShape = {
   rulesEnabled: false,
   shortcuts: [],
   postponeGreeting: '',
+  closeMessage: '',
 };
 
 export async function get<K extends keyof StorageShape>(

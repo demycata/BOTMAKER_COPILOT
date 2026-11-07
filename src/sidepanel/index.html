@@ -79,6 +79,25 @@
         </div>
       </section>
 
+      <!-- Cerrar todos -->
+      <section class="card">
+        <div class="card-head"><h2>Cerrar todos</h2></div>
+        <p class="hint">
+          Busca los chats pospuestos de la lista actual, les envia este mensaje y los
+          libera. Te pide confirmacion antes de empezar.
+        </p>
+        <div class="field">
+          <label for="close-message">Mensaje</label>
+          <textarea id="close-message" class="textarea" rows="5">¡Veo que no estás por ahi! 🧐
+Voy a cerrar el chat pero quedo disponible para cualquier consulta en la opción *Hablar con un asesor*
+
+¡Saludos!</textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="close-all">Cerrar todos</button>
+        </div>
+      </section>
+
       <!-- Reglas -->
       <section class="card">
         <div class="card-head">
@@ -146,6 +165,18 @@
         <div class="btn-row">
           <button class="btn btn-primary" id="postpone-confirm">Empezar</button>
           <button class="btn" id="postpone-cancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="close-modal" role="dialog" aria-modal="true" aria-labelledby="close-title">
+      <div class="modal-box">
+        <h2 class="modal-title" id="close-title"></h2>
+        <p class="hint" id="close-note"></p>
+        <p class="modal-message" id="close-preview"></p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="close-confirm">Enviar y liberar</button>
+          <button class="btn" id="close-cancel">Cancelar</button>
         </div>
       </div>
     </div>

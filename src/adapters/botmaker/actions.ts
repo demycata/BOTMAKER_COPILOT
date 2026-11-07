@@ -50,7 +50,13 @@ export function listChats(): ChatRef[] {
       const nameEl = queryFirst<HTMLElement>(SELECTORS.chatName, row);
       const name = (nameEl?.textContent ?? '').trim().slice(0, 80) || '(sin nombre)';
       const top = parseFloat(row.style.top);
-      return { id: row.id, name, el: row, offset: Number.isFinite(top) ? top : row.offsetTop };
+      return {
+        id: row.id,
+        name,
+        el: row,
+        offset: Number.isFinite(top) ? top : row.offsetTop,
+        postponed: !!queryFirst(SELECTORS.chatPostponed, row),
+      };
     });
 }
 
@@ -143,6 +149,11 @@ async function revealRow(chat: ChatRef): Promise<HTMLElement> {
     throw new Error('No encontre la conversacion en la lista (pudo cerrarse o cambiar de vista)');
   }
   return hit.row;
+}
+
+/** Mira en la lista si la conversacion sigue pospuesta. */
+export async function chatIsPostponed(chat: ChatRef): Promise<boolean> {
+  return !!queryFirst(SELECTORS.chatPostponed, await revealRow(chat));
 }
 
 function isOpenRow(row: HTMLElement): boolean {
@@ -438,6 +449,26 @@ async function closeConversation(type: string): Promise<void> {
   await waitForIdle(300);
 }
 
+/**
+ * Libera un chat recien respondido. Un chat pospuesto no ofrece "Liberar" hasta
+ * que el mensaje lo vuelve a asignar, y eso puede demorar un momento.
+ */
+async function releaseAfterSending(): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await clickMenuItem(MENU_ITEMS.release);
+      await waitForMenuClosed();
+      return;
+    } catch (err) {
+      dismissOverlays();
+      if (attempt >= 3) {
+        throw new Error(`Mensaje enviado, pero no pude liberar: ${(err as Error).message}`);
+      }
+      await waitForIdle(1000, 1500);
+    }
+  }
+}
+
 async function dispatchAction(actionId: BulkActionId, params?: BulkActionParams): Promise<void> {
   switch (actionId) {
     case 'release':
@@ -455,6 +486,10 @@ async function dispatchAction(actionId: BulkActionId, params?: BulkActionParams)
     case 'sendMessage':
       if (!params?.text) throw new Error('sendMessage requiere texto');
       return sendMessage(params.text, true);
+    case 'sendAndRelease':
+      if (!params?.text) throw new Error('sendAndRelease requiere texto');
+      await sendMessage(params.text, true);
+      return releaseAfterSending();
     default:
       throw new Error(`Accion no soportada: ${actionId as string}`);
   }

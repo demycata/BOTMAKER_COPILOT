@@ -29,6 +29,9 @@ export const SELECTORS = {
   /** Elemento clickeable que abre la conversacion (evita los de sesiones). */
   chatOpen: ['.customer-item > .customer-main[role="button"]', '.customer-main[role="button"]'],
 
+  /** Etiqueta naranja de un chat pospuesto ("Puesto en espera por..."). */
+  chatPostponed: ['.customer-chip.hold'],
+
   /** Marca de la fila actualmente abierta/seleccionada. */
   chatSelected: ['.customer-item.selected'],
 

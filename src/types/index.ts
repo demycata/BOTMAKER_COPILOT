@@ -10,6 +10,8 @@ export interface ChatRef {
   el?: HTMLElement;
   /** Posicion vertical en la lista, pista para volver a encontrarla al scrollear. */
   offset?: number;
+  /** La fila muestra la marca de pospuesto. */
+  postponed?: boolean;
 }
 
 /** Acciones masivas disponibles. Cada una se mapea a un handler en el adapter. */
@@ -17,7 +19,8 @@ export type BulkActionId =
   | 'release' // Liberar chat asignado (menu)
   | 'postpone' // Posponer atencion (menu, submenu de duracion)
   | 'close' // Cerrar conversacion (boton + dialogo con tipo)
-  | 'sendMessage'; // Enviar un mensaje puntual (composer)
+  | 'sendMessage' // Enviar un mensaje puntual (composer)
+  | 'sendAndRelease'; // Enviar un mensaje y liberar el chat
 
 /** Parametros opcionales de una accion. */
 export interface BulkActionParams {

@@ -38,6 +38,14 @@ const postponeTitle = $('postpone-title');
 const postponeNote = $('postpone-note');
 const postponeConfirmBtn = $<HTMLButtonElement>('postpone-confirm');
 const postponeCancelBtn = $<HTMLButtonElement>('postpone-cancel');
+const closeMessage = $<HTMLTextAreaElement>('close-message');
+const closeAllBtn = $<HTMLButtonElement>('close-all');
+const closeModal = $('close-modal');
+const closeTitle = $('close-title');
+const closeNote = $('close-note');
+const closePreview = $('close-preview');
+const closeConfirmBtn = $<HTMLButtonElement>('close-confirm');
+const closeCancelBtn = $<HTMLButtonElement>('close-cancel');
 const runDiagBtn = $<HTMLButtonElement>('run-diag');
 const logEl = $<HTMLUListElement>('log');
 
@@ -45,6 +53,8 @@ const logEl = $<HTMLUListElement>('log');
 let bulkTabId: number | undefined;
 /** Pestania que hizo la busqueda de "Posponer todo". */
 let postponeTabId: number | undefined;
+/** Pestania que hizo la busqueda de "Cerrar todos". */
+let closeTabId: number | undefined;
 let diagTimer: number | undefined;
 
 // --- Seleccion ---
@@ -71,6 +81,7 @@ actionSelect.addEventListener('change', () => {
 function setBulkRunning(running: boolean, cancellable = running): void {
   runBulkBtn.disabled = running;
   postponeAllBtn.disabled = running;
+  closeAllBtn.disabled = running;
   cancelBulkBtn.disabled = !cancellable;
 }
 
@@ -155,6 +166,55 @@ postponeCancelBtn.addEventListener('click', () => {
   hidePostponeModal();
   void sendToContent({ kind: 'postpone:discard' }, postponeTabId);
   addLog('Posponer todo: cancelado, no se toco ningun chat.');
+});
+
+// --- Cerrar todos ---
+closeAllBtn.addEventListener('click', async () => {
+  const text = closeMessage.value.trim();
+  if (!text) {
+    addLog('Escribi el mensaje a enviar.', 'fail');
+    return;
+  }
+  await set('closeMessage', text);
+  setBulkRunning(true, false);
+  addLog('Buscando chats pospuestos…');
+  if (!(await sendToContent({ kind: 'close:scan' }))) {
+    setBulkRunning(false);
+    addLog(NOT_CONNECTED, 'fail');
+  }
+});
+
+function showClosePreview(count: number, total: number, complete: boolean): void {
+  setBulkRunning(false);
+  if (!count) {
+    addLog(`No hay chats pospuestos entre los ${total} de la lista.`);
+    return;
+  }
+  const note = 'Se envia este mensaje y se libera cada chat. No se puede deshacer.';
+  closeTitle.textContent = `Cerrar ${count} de ${total} chats`;
+  closeNote.textContent = complete ? note : `${note} La lista es muy larga: puede haber mas.`;
+  closePreview.textContent = closeMessage.value.trim();
+  closeModal.classList.remove('hidden');
+  closeCancelBtn.focus();
+}
+
+closeConfirmBtn.addEventListener('click', async () => {
+  closeModal.classList.add('hidden');
+  setBulkRunning(true);
+  progressBox.classList.remove('hidden');
+  progressFill.style.width = '0%';
+  progressLabel.textContent = '';
+  const text = closeMessage.value.trim();
+  if (!(await sendToContent({ kind: 'close:confirm', text }, closeTabId))) {
+    setBulkRunning(false);
+    addLog(NOT_CONNECTED, 'fail');
+  }
+});
+
+closeCancelBtn.addEventListener('click', () => {
+  closeModal.classList.add('hidden');
+  void sendToContent({ kind: 'close:discard' }, closeTabId);
+  addLog('Cerrar todos: cancelado, no se toco ningun chat.');
 });
 
 // --- Atajos ---
@@ -284,6 +344,10 @@ chrome.runtime.onMessage.addListener((envelope: Envelope, sender) => {
       postponeTabId = sender.tab?.id;
       showPostponePreview(msg.total, msg.complete);
       break;
+    case 'close:preview':
+      closeTabId = sender.tab?.id;
+      showClosePreview(msg.count, msg.total, msg.complete);
+      break;
     case 'bulk:rejected':
       setBulkRunning(false);
       progressBox.classList.add('hidden');
@@ -350,13 +414,15 @@ async function connectToTab(): Promise<void> {
 chrome.tabs.onActivated.addListener(() => void connectToTab());
 
 (async function init() {
-  const [rules, rulesEnabled, shortcuts, greeting] = await Promise.all([
+  const [rules, rulesEnabled, shortcuts, greeting, savedCloseMessage] = await Promise.all([
     get('rules'),
     get('rulesEnabled'),
     get('shortcuts'),
     get('postponeGreeting'),
+    get('closeMessage'),
   ]);
   if (greeting) postponeGreeting.value = greeting;
+  if (savedCloseMessage) closeMessage.value = savedCloseMessage;
   rulesToggle.checked = rulesEnabled;
   if (rules[0]) {
     ruleMatch.value = rules[0].match.value;

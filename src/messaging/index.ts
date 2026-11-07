@@ -22,6 +22,9 @@ export type PanelToContent =
   | { kind: 'postpone:scan'; greeting: string }
   | { kind: 'postpone:confirm'; postponePath: string[] }
   | { kind: 'postpone:discard' }
+  | { kind: 'close:scan' }
+  | { kind: 'close:confirm'; text: string }
+  | { kind: 'close:discard' }
   | { kind: 'diag:run' };
 
 // --- Content -> Panel ---
@@ -31,6 +34,7 @@ export type ContentToPanel =
   | { kind: 'bulk:progress'; progress: BulkProgress }
   | { kind: 'bulk:rejected'; reason: string }
   | { kind: 'postpone:preview'; total: number; complete: boolean }
+  | { kind: 'close:preview'; count: number; total: number; complete: boolean }
   | { kind: 'rule:fired'; ruleName: string; chatName: string }
   | { kind: 'diag:result'; report: DiagnosticReport }
   | { kind: 'log'; text: string };

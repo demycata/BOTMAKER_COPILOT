@@ -29,9 +29,9 @@ body {
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -47,18 +47,82 @@ body {
   font-size: 11px;
 }
 
+.icon-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: none;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.link-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 11px;
+}
+
 .panel {
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.status {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.status.fail {
+  color: var(--danger);
+}
+.status.ok {
+  color: var(--ok);
+}
+
+.rule-row {
+  padding: 10px;
+  margin-bottom: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.rule-row.rule-invalid {
+  border-color: var(--danger);
+}
+.rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.rules-dirty {
+  margin: 8px 0 0;
+  color: var(--danger);
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px;
 }
 .card-head {
   display: flex;
@@ -183,7 +247,7 @@ body {
 
 .log {
   list-style: none;
-  margin: 0;
+  margin: 8px 0 0;
   padding: 0;
   max-height: 160px;
   overflow-y: auto;

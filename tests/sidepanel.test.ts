@@ -134,31 +134,183 @@ describe('accion masiva', () => {
 });
 
 describe('reglas', () => {
-  it('activar guarda la regla que se ve en el formulario', async () => {
+  const rows = () => Array.from(document.querySelectorAll<HTMLElement>('.rule-row'));
+  const fill = (row: HTMLElement, match: string, reply: string) => {
+    row.querySelector<HTMLInputElement>('.rule-match')!.value = match;
+    row.querySelector<HTMLTextAreaElement>('.rule-reply')!.value = reply;
+  };
+  const saved = () => storage.rules as AutomationRule[] | undefined;
+  const save = async () => {
+    $('save-rules').click();
+    await flush();
+  };
+  const rule = (id: string, value: string, autoSend = false): AutomationRule => ({
+    id,
+    name: value,
+    enabled: true,
+    oncePerChat: true,
+    match: { type: 'contains', value },
+    action: { type: 'sendMessage', text: `respuesta ${value}`, autoSend },
+  });
+
+  it('sin reglas guardadas muestra la de ejemplo sin guardarla', async () => {
+    await startPanel();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].querySelector<HTMLInputElement>('.rule-match')!.value).toBe('hablar con asesor');
+    expect(saved()).toBeUndefined();
+  });
+
+  it('muestra todas las reglas guardadas', async () => {
+    await startPanel({ rules: [rule('a', 'turno'), rule('b', 'precio', true)] });
+    expect(rows()).toHaveLength(2);
+    expect(rows()[1].querySelector<HTMLInputElement>('.rule-autosend')!.checked).toBe(true);
+  });
+
+  it('agrega varias reglas y las guarda con ids distintos, en orden', async () => {
+    await startPanel();
+    $('add-rule').click();
+    $('add-rule').click();
+    fill(rows()[1], 'turno', 'te paso los turnos');
+    fill(rows()[2], 'precio', 'te paso los precios');
+    await save();
+
+    expect(saved()?.map((r) => r.match.value)).toEqual(['hablar con asesor', 'turno', 'precio']);
+    expect(new Set(saved()?.map((r) => r.id)).size).toBe(3);
+    expect(logText()).toContain('Reglas guardadas.');
+  });
+
+  it('conserva el id de una regla editada', async () => {
+    await startPanel({ rules: [rule('a', 'turno')] });
+    fill(rows()[0], 'turnos', 'otra');
+    await save();
+    expect(saved()?.[0]).toMatchObject({ id: 'a', name: 'turnos' });
+  });
+
+  it('elimina una regla', async () => {
+    await startPanel({ rules: [rule('a', 'turno'), rule('b', 'precio')] });
+    rows()[0].querySelector<HTMLElement>('.rule-remove')!.click();
+    await save();
+    expect(saved()?.map((r) => r.id)).toEqual(['b']);
+  });
+
+  it('guarda si cada regla esta activa', async () => {
+    await startPanel({ rules: [rule('a', 'turno')] });
+    rows()[0].querySelector<HTMLInputElement>('.rule-enabled')!.checked = false;
+    await save();
+    expect(saved()?.[0].enabled).toBe(false);
+  });
+
+  it('no guarda nada si una regla esta incompleta, y la marca', async () => {
+    await startPanel({ rules: [rule('a', 'turno')] });
+    $('add-rule').click();
+    await save();
+    expect(saved()).toHaveLength(1);
+    expect(rows()[1].classList.contains('rule-invalid')).toBe(true);
+    expect(logText()).toContain('Cada regla necesita');
+  });
+
+  it('avisa de cambios sin guardar hasta guardarlos', async () => {
+    await startPanel();
+    const dirty = () => !$('rules-dirty').classList.contains('hidden');
+    expect(dirty()).toBe(false);
+    rows()[0].querySelector('.rule-match')!.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(dirty()).toBe(true);
+    await save();
+    expect(dirty()).toBe(false);
+  });
+
+  it('activar guarda las reglas que se ven en la lista', async () => {
     await startPanel();
     await toggleRules(true);
-    const [rule] = storage.rules as AutomationRule[];
-    expect(rule.match.value).toBe('hablar con asesor');
-    expect(rule.action.autoSend).toBe(false);
+    expect(saved()?.[0].match.value).toBe('hablar con asesor');
+    expect(saved()?.[0].action.autoSend).toBe(false);
     expect(storage.rulesEnabled).toBe(true);
   });
 
-  it('no deja activar una regla vacia', async () => {
+  it('no deja activar con una regla incompleta', async () => {
     await startPanel();
-    $<HTMLInputElement>('rule-match').value = '  ';
+    fill(rows()[0], '  ', 'hola');
     await toggleRules(true);
     expect($<HTMLInputElement>('rules-toggle').checked).toBe(false);
-    expect(storage.rules).toBeUndefined();
+    expect(saved()).toBeUndefined();
     expect(storage.rulesEnabled).toBeUndefined();
   });
+});
 
-  it('no deja guardar una regla vacia', async () => {
+describe('vistas', () => {
+  const visible = (id: string) => !$(id).classList.contains('hidden');
+  const toggle = () => $('toggle-settings').click();
+
+  it('arranca en el panel principal, con solo lo pedido', async () => {
     await startPanel();
-    $<HTMLTextAreaElement>('rule-reply').value = '';
-    $('save-rule').click();
+    expect(visible('view-main')).toBe(true);
+    expect(visible('view-settings')).toBe(false);
+    const main = $('view-main');
+    for (const id of ['selection-toggle', 'run-bulk', 'postpone-all', 'close-all']) {
+      expect(main.contains($(id))).toBe(true);
+    }
+    for (const id of ['postpone-greeting', 'close-message', 'rules-list', 'log']) {
+      expect(main.contains($(id))).toBe(false);
+    }
+  });
+
+  it('el engranaje abre Configuracion y vuelve', async () => {
+    await startPanel();
+    toggle();
+    expect(visible('view-main')).toBe(false);
+    expect(visible('view-settings')).toBe(true);
+    expect($('toggle-settings').getAttribute('aria-label')).toBe('Volver');
+    toggle();
+    expect(visible('view-main')).toBe(true);
+  });
+
+  it('avisa al volver si quedaron reglas sin guardar', async () => {
+    await startPanel();
+    toggle();
+    $('add-rule').click();
+    toggle();
+    expect($('status').textContent).toContain('sin guardar');
+  });
+
+  it('los avisos se ven en el panel principal', async () => {
+    await startPanel();
+    receive({ kind: 'bulk:rejected', reason: 'No hay chats seleccionados.' });
+    expect($('status').textContent).toBe('No hay chats seleccionados.');
+    expect($('status').classList.contains('fail')).toBe(true);
+  });
+
+  it('si hubo errores, avisa donde esta el detalle', async () => {
+    await startPanel();
+    receive({
+      kind: 'bulk:progress',
+      progress: {
+        actionId: 'release',
+        total: 1,
+        done: 1,
+        failed: 1,
+        skipped: 0,
+        finished: true,
+        cancelled: false,
+        results: [{ chatId: 'a', chatName: 'Ana', ok: false, error: 'boom' }],
+      },
+    });
+    expect($('status').textContent).toContain('1 con error');
+    expect(logText()).toContain('Ana: boom');
+  });
+});
+
+describe('mensajes', () => {
+  it('guarda un mensaje al editarlo en Configuracion', async () => {
+    await startPanel();
+    const greeting = $<HTMLTextAreaElement>('postpone-greeting');
+    greeting.value = ' Nuevo saludo ';
+    greeting.dispatchEvent(new Event('change'));
+    const close = $<HTMLTextAreaElement>('close-message');
+    close.value = 'Nuevo cierre';
+    close.dispatchEvent(new Event('change'));
     await flush();
-    expect(storage.rules).toBeUndefined();
-    expect(logText()).toContain('La regla necesita');
+    expect(storage.postponeGreeting).toBe('Nuevo saludo');
+    expect(storage.closeMessage).toBe('Nuevo cierre');
   });
 });
 
@@ -173,7 +325,7 @@ describe('estado', () => {
     expect($<HTMLButtonElement>('run-bulk').disabled).toBe(true);
   });
 
-  it('recupera la duracion de posponer y no la pisa al guardar otro atajo', async () => {
+  it('recupera la duracion del atajo y no la pisa al guardar otro atajo', async () => {
     const shortcuts = [
       {
         combo: 'ctrl+p',
@@ -183,7 +335,7 @@ describe('estado', () => {
       },
     ];
     await startPanel({ shortcuts });
-    expect($<HTMLSelectElement>('postpone-select').value).toBe('8h');
+    expect($<HTMLSelectElement>('shortcut-duration').value).toBe('8h');
 
     const release = document.querySelector<HTMLInputElement>('[data-action="release"]')!;
     release.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true }));

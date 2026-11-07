@@ -288,17 +288,15 @@ async function checkRules(): Promise<void> {
   if (fingerprint === lastFingerprint) return; // mismo mensaje, no repetir
   lastFingerprint = fingerprint;
 
-  const hit = evaluate(text, rules);
-  if (!hit || !fireLog.shouldFire(chat.id, hit.rule)) return;
+  // Solo compiten las reglas que todavia pueden actuar en este chat, asi una que ya
+  // respondio no tapa a la siguiente. Mirar los mensajes salientes es un doble seguro
+  // por si se recargo la pagina y se perdio el registro.
+  const pending = rules.filter(
+    (r) => fireLog.shouldFire(chat.id, r) && !bm.wasAlreadySent(r.action.text),
+  );
+  const hit = evaluate(text, pending);
+  if (!hit) return;
   const { rule } = hit;
-
-  // Doble seguro: si esa respuesta ya figura en los mensajes salientes del chat,
-  // no la repetimos (aunque se haya recargado la pagina y se pierda el registro).
-  if (bm.wasAlreadySent(rule.action.text)) {
-    fireLog.markFired(chat.id, rule.id);
-    sendToPanel({ kind: 'log', text: `Regla "${rule.name}": ya estaba respondida, se omite.` });
-    return;
-  }
 
   // Si alguien escribio despues del cliente, el mensaje puede estar ya atendido:
   // se deja escrito para que decida el operador, nunca se envia solo.

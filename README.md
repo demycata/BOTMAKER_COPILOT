@@ -41,6 +41,10 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 
 ## Que hace
 
+El panel principal tiene Seleccion, Accion masiva y los botones Posponer todo y
+Cerrar todos. El engranaje abre Configuracion: mensajes, reglas, atajos, actividad
+y diagnostico.
+
 - **Seleccion multiple** con checkboxes en la lista y contador. La seleccion se
   mantiene al scrollear.
 - **Todo** recorre la lista entera, incluidas las conversaciones que no estan en
@@ -54,8 +58,9 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 - **Cerrar todos** busca los chats pospuestos de la lista actual y, tras confirmar,
   les envia el mensaje configurado y los libera. Si el mensaje no sale, no libera
   ese chat. Si un chat dejo de estar pospuesto, lo saltea.
-- **Regla** "si el mensaje contiene X, responder Y", que deja el texto escrito o
-  lo envia segun el toggle. Funciona con el panel cerrado y tras recargar.
+- **Reglas** "si el mensaje contiene X, responder Y", todas las que quieras. Cada
+  una deja el texto escrito o lo envia, y actua una vez por chat. Si coinciden
+  varias gana la primera de la lista. Funcionan con el panel cerrado y tras recargar.
 - **Atajos** para liberar, posponer y cerrar la conversacion abierta.
 - **Diagnostico**: el boton de la seccion Actividad muestra cuantos elementos
   encuentra cada selector en la pagina. Solo lee y no incluye datos de clientes.

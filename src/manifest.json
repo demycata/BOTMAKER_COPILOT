@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Copilot for Botmaker",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Copiloto para operadores de Botmaker: seleccion multiple, acciones masivas y motor de reglas.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "sidePanel"],

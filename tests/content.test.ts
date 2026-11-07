@@ -82,6 +82,43 @@ describe('reglas', () => {
     expect(fired).toMatchObject({ chatName: 'Cliente 1' });
   });
 
+  it('con varias reglas usa la que coincide', async () => {
+    const turno = { ...advisorRule(false), id: 'turno', match: { type: 'contains' as const, value: 'turno' } };
+    turno.action = { ...turno.action, text: 'Te paso los turnos' };
+    installChrome({ rules: [advisorRule(false), turno], rulesEnabled: true });
+    const fake = mountFakeBotmaker({
+      messages: () => [{ from: 'client', text: 'quiero un turno' }],
+    });
+    fake.openNow('chat-1');
+    await startContent();
+    await vi.waitFor(() => expect(fake.composer.value).toBe('Te paso los turnos'), { timeout: 3000 });
+  });
+
+  it('si la primera regla ya respondio en el chat, puede actuar la siguiente', async () => {
+    const segunda = { ...advisorRule(false), id: 'segunda' };
+    segunda.action = { ...segunda.action, text: 'Segunda respuesta' };
+    installChrome({ rules: [advisorRule(false), segunda], rulesEnabled: true });
+    const fake = mountFakeBotmaker({
+      messages: () => [
+        { from: 'agent', text: 'Te derivo con un asesor' },
+        { from: 'client', text: 'quiero hablar con asesor' },
+      ],
+    });
+    fake.openNow('chat-1');
+    await startContent();
+    await vi.waitFor(() => expect(fake.composer.value).toBe('Segunda respuesta'), { timeout: 3000 });
+  });
+
+  it('ignora una regla desactivada', async () => {
+    const off = { ...advisorRule(false), enabled: false };
+    installChrome({ rules: [off], rulesEnabled: true });
+    const fake = mountFakeBotmaker({ messages: asksForAdvisor });
+    fake.openNow('chat-1');
+    await startContent();
+    await settle(1200);
+    expect(fake.composer.value).toBe('');
+  });
+
   it('envia solo si lo ultimo del hilo es del cliente', async () => {
     installChrome({ rules: [advisorRule(true)], rulesEnabled: true });
     const fake = mountFakeBotmaker({ messages: asksForAdvisor });

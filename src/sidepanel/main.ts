@@ -2,12 +2,13 @@
 // y pinta lo que el content reporta (progreso, reglas disparadas, logs).
 
 import type { DiagnosticReport } from '@/adapters/botmaker/actions';
-import type { AutomationRule, BulkActionId, BulkActionParams, BulkProgress, Shortcut } from '@/types';
+import type { BulkActionId, BulkActionParams, BulkProgress, Shortcut } from '@/types';
 import type { ContentToPanel, Envelope } from '@/messaging';
 import { sendToContent, pingContent } from '@/messaging';
 import { get, set } from '@/storage';
 import { defaultAdvisorRule } from '@/core/rules-engine';
 import { comboFromEvent } from '@/core/shortcuts';
+import { RulesEditor } from './rules-editor';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -27,10 +28,12 @@ const progressBox = $('progress-box');
 const progressFill = $('progress-fill');
 const progressLabel = $('progress-label');
 const rulesToggle = $<HTMLInputElement>('rules-toggle');
-const ruleMatch = $<HTMLInputElement>('rule-match');
-const ruleReply = $<HTMLTextAreaElement>('rule-reply');
-const ruleAutosend = $<HTMLInputElement>('rule-autosend');
-const saveRuleBtn = $<HTMLButtonElement>('save-rule');
+const rulesDirty = $('rules-dirty');
+const shortcutDuration = $<HTMLSelectElement>('shortcut-duration');
+const viewMain = $('view-main');
+const viewSettings = $('view-settings');
+const settingsBtn = $<HTMLButtonElement>('toggle-settings');
+const statusEl = $('status');
 const postponeGreeting = $<HTMLTextAreaElement>('postpone-greeting');
 const postponeAllBtn = $<HTMLButtonElement>('postpone-all');
 const postponeModal = $('postpone-modal');
@@ -56,6 +59,24 @@ let postponeTabId: number | undefined;
 /** Pestania que hizo la busqueda de "Cerrar todos". */
 let closeTabId: number | undefined;
 let diagTimer: number | undefined;
+
+// --- Vistas ---
+function showSettings(open: boolean): void {
+  viewMain.classList.toggle('hidden', open);
+  viewSettings.classList.toggle('hidden', !open);
+  $('settings-icon').classList.toggle('hidden', open);
+  $('settings-back').classList.toggle('hidden', !open);
+  settingsBtn.setAttribute('aria-label', open ? 'Volver' : 'Configuracion');
+  settingsBtn.title = open ? 'Volver' : 'Configuracion';
+  document.documentElement.scrollTop = 0;
+  if (!open && !rulesDirty.classList.contains('hidden')) {
+    addLog('Hay cambios en las reglas sin guardar.', 'fail');
+  }
+}
+
+settingsBtn.addEventListener('click', () =>
+  showSettings(viewSettings.classList.contains('hidden')),
+);
 
 // --- Seleccion ---
 selectionToggle.addEventListener('change', () => {
@@ -119,7 +140,7 @@ const POSTPONE_ALL_DURATION = '4h';
 postponeAllBtn.addEventListener('click', async () => {
   const greeting = postponeGreeting.value.trim();
   if (!greeting) {
-    addLog('Escribi el saludo a buscar.', 'fail');
+    addLog('Escribi el saludo en Configuracion.', 'fail');
     return;
   }
   await set('postponeGreeting', greeting);
@@ -168,11 +189,21 @@ postponeCancelBtn.addEventListener('click', () => {
   addLog('Posponer todo: cancelado, no se toco ningun chat.');
 });
 
+// Los mensajes se editan en Configuracion y se guardan al salir del campo.
+postponeGreeting.addEventListener('change', () => {
+  const text = postponeGreeting.value.trim();
+  if (text) void set('postponeGreeting', text);
+});
+closeMessage.addEventListener('change', () => {
+  const text = closeMessage.value.trim();
+  if (text) void set('closeMessage', text);
+});
+
 // --- Cerrar todos ---
 closeAllBtn.addEventListener('click', async () => {
   const text = closeMessage.value.trim();
   if (!text) {
-    addLog('Escribi el mensaje a enviar.', 'fail');
+    addLog('Escribi el mensaje de cierre en Configuracion.', 'fail');
     return;
   }
   await set('closeMessage', text);
@@ -241,7 +272,7 @@ function buildShortcuts(): Shortcut[] {
         combo,
         actionId: action,
         label: 'Posponer',
-        params: { postponePath: POSTPONE_PATHS[postponeSelect.value] },
+        params: { postponePath: POSTPONE_PATHS[shortcutDuration.value] },
       });
   }
   return list;
@@ -269,38 +300,40 @@ for (const inp of shortcutInputs()) {
   });
 }
 
-// Si cambia la duracion de posponer, actualizamos el atajo de posponer.
-postponeSelect.addEventListener('change', () => void saveShortcuts());
+shortcutDuration.addEventListener('change', () => void saveShortcuts());
 
 // --- Reglas ---
-/** Guarda la regla del formulario. Devuelve false si esta incompleta. */
-async function saveRule(): Promise<boolean> {
-  const value = ruleMatch.value.trim();
-  const text = ruleReply.value.trim();
-  if (!value || !text) {
-    addLog('La regla necesita el texto a detectar y la respuesta.', 'fail');
+const rulesEditor = new RulesEditor(
+  $('rules-list'),
+  $<HTMLTemplateElement>('rule-template'),
+  () => rulesDirty.classList.remove('hidden'),
+);
+
+/** Guarda las reglas de la lista. Devuelve false si alguna esta incompleta. */
+async function saveRules(): Promise<boolean> {
+  const rules = rulesEditor.read();
+  if (!rules) {
+    addLog('Cada regla necesita el texto a detectar y la respuesta.', 'fail');
     return false;
   }
-  const rule: AutomationRule = {
-    ...defaultAdvisorRule(),
-    match: { type: 'contains', value },
-    action: { type: 'sendMessage', text, autoSend: ruleAutosend.checked },
-  };
-  await set('rules', [rule]);
+  await set('rules', rules);
+  rulesDirty.classList.add('hidden');
   return true;
 }
 
+$('add-rule').addEventListener('click', () => rulesEditor.add());
+
 rulesToggle.addEventListener('change', async () => {
-  // Al activar se guarda lo que se ve en el formulario: es la regla que va a correr.
-  if (rulesToggle.checked && !(await saveRule())) {
+  // Al activar se guarda lo que se ve en la lista: son las reglas que van a correr.
+  if (rulesToggle.checked && !(await saveRules())) {
     rulesToggle.checked = false;
     return;
   }
   await set('rulesEnabled', rulesToggle.checked);
 });
 
-saveRuleBtn.addEventListener('click', async () => {
-  if (await saveRule()) addLog('Regla guardada.', 'ok');
+$('save-rules').addEventListener('click', async () => {
+  if (await saveRules()) addLog('Reglas guardadas.', 'ok');
 });
 
 // --- Diagnostico ---
@@ -383,12 +416,20 @@ function paintProgress(p: BulkProgress): void {
     p.results
       .filter((r) => !r.ok && !r.skipped)
       .forEach((r) => addLog(`${r.chatName}: ${r.error}`, 'fail'));
+    if (p.failed) setStatus(`${p.failed} con error: detalle en Configuracion, Actividad.`, 'fail');
   } else {
     progressLabel.textContent = `Procesando ${p.done}/${p.total}${p.currentChatName ? ` — ${p.currentChatName}` : ''}`;
   }
 }
 
+/** Linea de estado del panel principal, donde no se ve la Actividad. */
+function setStatus(text: string, cls: '' | 'ok' | 'fail'): void {
+  statusEl.textContent = text;
+  statusEl.className = `status ${cls}`;
+}
+
 function addLog(text: string, cls: '' | 'ok' | 'fail' = ''): void {
+  setStatus(text, cls);
   const li = document.createElement('li');
   const ts = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   li.innerHTML = `<span class="ts">${ts}</span><span class="${cls}">${escapeHtml(text)}</span>`;
@@ -424,11 +465,7 @@ chrome.tabs.onActivated.addListener(() => void connectToTab());
   if (greeting) postponeGreeting.value = greeting;
   if (savedCloseMessage) closeMessage.value = savedCloseMessage;
   rulesToggle.checked = rulesEnabled;
-  if (rules[0]) {
-    ruleMatch.value = rules[0].match.value;
-    ruleReply.value = rules[0].action.text;
-    ruleAutosend.checked = rules[0].action.autoSend;
-  }
+  rulesEditor.render(rules.length ? rules : [defaultAdvisorRule()]);
   // Poblar los inputs de atajos con lo guardado.
   for (const inp of shortcutInputs()) {
     const sc = shortcuts.find((s) => s.actionId === (inp.dataset.action as BulkActionId));
@@ -442,7 +479,7 @@ chrome.tabs.onActivated.addListener(() => void connectToTab());
   const savedDuration = Object.keys(POSTPONE_PATHS).find(
     (key) => POSTPONE_PATHS[key].join() === savedPath?.join(),
   );
-  if (savedDuration) postponeSelect.value = savedDuration;
+  if (savedDuration) shortcutDuration.value = savedDuration;
 
   await connectToTab();
 })();

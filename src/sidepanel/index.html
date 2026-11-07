@@ -10,9 +10,16 @@
     <header class="topbar">
       <span class="brand">Copilot</span>
       <span class="brand-sub">for Botmaker</span>
+      <button class="icon-btn" id="toggle-settings" aria-label="Configuracion" title="Configuracion">
+        <svg id="settings-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.8H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+        <span class="hidden" id="settings-back">Volver</span>
+      </button>
     </header>
 
-    <main class="panel">
+    <main class="panel" id="view-main">
       <!-- Seleccion -->
       <section class="card">
         <div class="card-head">
@@ -63,38 +70,31 @@
         </div>
       </section>
 
-      <!-- Posponer todo -->
+      <!-- Funciones -->
       <section class="card">
-        <div class="card-head"><h2>Posponer todo</h2></div>
-        <p class="hint">
-          Abre uno por uno los chats de la lista actual y pospone 4 horas los que
-          terminan con este saludo. Te pide confirmacion antes de empezar.
-        </p>
-        <div class="field">
-          <label for="postpone-greeting">Saludo</label>
-          <textarea id="postpone-greeting" class="textarea" rows="2">Hola, soy Demian del Equipo de Dental, ¿En qué puedo ayudarte?</textarea>
-        </div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="postpone-all">Posponer todo</button>
+          <button class="btn btn-primary" id="postpone-all" title="Pospone 4 horas los chats de la lista que terminan con tu saludo">Posponer todo</button>
+          <button class="btn btn-primary" id="close-all" title="Envia el mensaje de cierre y libera los chats pospuestos de la lista">Cerrar todos</button>
         </div>
       </section>
 
-      <!-- Cerrar todos -->
+      <p class="status" id="status" role="status"></p>
+    </main>
+
+    <main class="panel hidden" id="view-settings">
+      <!-- Mensajes -->
       <section class="card">
-        <div class="card-head"><h2>Cerrar todos</h2></div>
-        <p class="hint">
-          Busca los chats pospuestos de la lista actual, les envia este mensaje y los
-          libera. Te pide confirmacion antes de empezar.
-        </p>
+        <div class="card-head"><h2>Mensajes</h2></div>
         <div class="field">
-          <label for="close-message">Mensaje</label>
-          <textarea id="close-message" class="textarea" rows="5">¡Veo que no estás por ahi! 🧐
+          <label for="postpone-greeting">Saludo de Posponer todo</label>
+          <textarea id="postpone-greeting" class="textarea" rows="2">Hola, soy Demian del Equipo de Dental, ¿En qué puedo ayudarte?</textarea>
+        </div>
+        <div class="field">
+          <label for="close-message">Mensaje de Cerrar todos</label>
+          <textarea id="close-message" class="textarea" rows="7">¡Veo que no estás por ahi! 🧐
 Voy a cerrar el chat pero quedo disponible para cualquier consulta en la opción *Hablar con un asesor*
 
 ¡Saludos!</textarea>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" id="close-all">Cerrar todos</button>
         </div>
       </section>
 
@@ -108,23 +108,15 @@ Voy a cerrar el chat pero quedo disponible para cualquier consulta en la opción
           </label>
         </div>
         <p class="hint">
-          Cuando el ultimo mensaje del cliente coincide, se dispara la accion.
+          Cuando el ultimo mensaje del cliente coincide, se dispara la regla. Si coinciden
+          varias, se usa la primera de la lista. Cada regla actua una vez por chat.
         </p>
-        <div class="field">
-          <label>Si el mensaje contiene</label>
-          <input type="text" id="rule-match" class="input" value="hablar con asesor" />
-        </div>
-        <div class="field">
-          <label>Responder con</label>
-          <textarea id="rule-reply" class="textarea" rows="3">En un momento te derivo con un asesor. Gracias por tu paciencia.</textarea>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="rule-autosend" />
-          <span>Enviar automaticamente (si no, solo lo deja escrito)</span>
-        </label>
+        <div id="rules-list"></div>
         <div class="btn-row">
-          <button class="btn btn-primary" id="save-rule">Guardar regla</button>
+          <button class="btn" id="add-rule">Agregar regla</button>
+          <button class="btn btn-primary" id="save-rules">Guardar reglas</button>
         </div>
+        <p class="hint rules-dirty hidden" id="rules-dirty">Hay cambios sin guardar.</p>
       </section>
 
       <!-- Atajos -->
@@ -139,8 +131,16 @@ Voy a cerrar el chat pero quedo disponible para cualquier consulta en la opción
           <input class="input shortcut-input" data-action="release" readonly placeholder="Sin asignar" />
         </div>
         <div class="field">
-          <label>Posponer (usa la duración de arriba)</label>
+          <label>Posponer</label>
           <input class="input shortcut-input" data-action="postpone" readonly placeholder="Sin asignar" />
+        </div>
+        <div class="field">
+          <label for="shortcut-duration">Duracion del atajo de posponer</label>
+          <select id="shortcut-duration" class="select">
+            <option value="4h">Por 4 horas</option>
+            <option value="8h">Por 8 horas</option>
+            <option value="12h">Por 12 horas</option>
+          </select>
         </div>
         <div class="field">
           <label>Cerrar (consulta resuelta)</label>
@@ -157,6 +157,30 @@ Voy a cerrar el chat pero quedo disponible para cualquier consulta en la opción
         <ul class="log" id="log"></ul>
       </section>
     </main>
+
+    <template id="rule-template">
+      <div class="rule-row">
+        <div class="rule-head">
+          <label class="switch">
+            <input type="checkbox" class="rule-enabled" />
+            <span>Regla activa</span>
+          </label>
+          <button class="link-btn rule-remove" type="button">Eliminar</button>
+        </div>
+        <div class="field">
+          <label>Si el mensaje contiene</label>
+          <input type="text" class="input rule-match" />
+        </div>
+        <div class="field">
+          <label>Responder con</label>
+          <textarea class="textarea rule-reply" rows="2"></textarea>
+        </div>
+        <label class="switch">
+          <input type="checkbox" class="rule-autosend" />
+          <span>Enviar automaticamente (si no, solo lo deja escrito)</span>
+        </label>
+      </div>
+    </template>
 
     <div class="modal hidden" id="postpone-modal" role="dialog" aria-modal="true" aria-labelledby="postpone-title">
       <div class="modal-box">

@@ -1,10 +1,16 @@
 // Utilidades de DOM genericas (no saben nada de Botmaker).
 // La idea: primitivas robustas para automatizar una SPA que re-renderiza sola.
 
+import { normalize } from '@/core/text';
+
 /** Espera a que aparezca un elemento que cumpla el predicado, o falla por timeout. */
 export function waitFor<T extends Element = Element>(
   find: () => T | null,
-  { timeout = 8000, interval = 120 }: { timeout?: number; interval?: number } = {},
+  {
+    timeout = 8000,
+    interval = 120,
+    what = 'el elemento esperado',
+  }: { timeout?: number; interval?: number; what?: string } = {},
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const found = find();
@@ -27,7 +33,7 @@ export function waitFor<T extends Element = Element>(
         resolve(el);
       } else if (Date.now() > deadline) {
         cleanup();
-        reject(new Error('waitFor: timeout'));
+        reject(new Error(`Tiempo agotado esperando ${what}`));
       }
     }, interval);
 
@@ -36,6 +42,14 @@ export function waitFor<T extends Element = Element>(
       window.clearInterval(poll);
     }
   });
+}
+
+/** Espera a que una condicion se cumpla, o falla por timeout. */
+export async function waitUntil(
+  condition: () => boolean,
+  opts: { timeout?: number; what?: string } = {},
+): Promise<void> {
+  await waitFor(() => (condition() ? document.documentElement : null), opts);
 }
 
 /** Espera a que el DOM se "aquiete" (sin mutaciones) durante `quietMs`. */
@@ -55,15 +69,6 @@ export function waitForIdle(quietMs = 400, maxWait = 5000): Promise<void> {
       resolve();
     }
   });
-}
-
-/** Normaliza texto: minusculas y sin acentos, para matchear de forma tolerante. */
-export function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
 }
 
 /**

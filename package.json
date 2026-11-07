@@ -1,11 +1,12 @@
 {
   "name": "copilot-botmaker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Copiloto para operadores de Botmaker: seleccion multiple, acciones masivas y motor de reglas. Opera sobre el DOM, sin API de Botmaker.",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && node build.mjs",
     "dev": "node build.mjs --watch",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

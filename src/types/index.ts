@@ -2,12 +2,14 @@
 
 /** Un chat tal como lo vemos en la lista de conversaciones de Botmaker. */
 export interface ChatRef {
-  /** Id estable si Botmaker lo expone; si no, un hash del texto de la fila. */
+  /** Id del wrapper de la fila en la lista de Botmaker. */
   id: string;
   /** Nombre del cliente, si se puede leer. */
   name: string;
-  /** Referencia debil al elemento de la fila en el DOM (no serializable). */
+  /** Fila en el DOM. Solo vale en el instante en que se leyo: los nodos se reciclan. */
   el?: HTMLElement;
+  /** Posicion vertical en la lista, pista para volver a encontrarla al scrollear. */
+  offset?: number;
 }
 
 /** Acciones masivas disponibles. Cada una se mapea a un handler en el adapter. */
@@ -17,11 +19,9 @@ export type BulkActionId =
   | 'close' // Cerrar conversacion (boton + dialogo con tipo)
   | 'sendMessage'; // Enviar un mensaje puntual (composer)
 
-/** Parametros opcionales de una accion (etiqueta, texto de plantilla, etc.). */
+/** Parametros opcionales de una accion. */
 export interface BulkActionParams {
-  tag?: string;
   text?: string;
-  templateId?: string;
   /** Ruta de submenus para Posponer, ej. ['Horas', 'Por 4 horas'] o ['Por siempre']. */
   postponePath?: string[];
   /** Tipo de conversacion al cerrar, ej. 'Consulta resuelta'. */
@@ -44,6 +44,7 @@ export interface BulkProgress {
   failed: number;
   currentChatName?: string;
   finished: boolean;
+  cancelled: boolean;
   results: BulkItemResult[];
 }
 
@@ -72,12 +73,6 @@ export interface RuleAction {
   text: string;
   /** Si false, deja el texto en el cuadro pero NO envia (lo revisa el operador). */
   autoSend: boolean;
-}
-
-/** Entrada del historial local de acciones. */
-export interface HistoryEntry {
-  ts: number;
-  text: string;
 }
 
 /** Atajo de teclado para una accion sobre el chat abierto. */

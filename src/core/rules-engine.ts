@@ -3,7 +3,7 @@
 // El "efecto" (mandar el mensaje) lo ejecuta quien lo llama, con el adapter.
 
 import type { AutomationRule } from '@/types';
-import { normalize } from '@/adapters/botmaker/dom';
+import { normalize, stripAccents } from '@/core/text';
 
 export interface RuleHit {
   rule: AutomationRule;
@@ -21,12 +21,14 @@ export function evaluate(text: string, rules: AutomationRule[]): RuleHit | null 
 
 function matches(normalizedText: string, rule: AutomationRule): boolean {
   const { match } = rule;
+  // Un patron vacio coincidiria con todo: se ignora para no responder a cualquier mensaje.
+  if (!match.value.trim()) return false;
   if (match.type === 'contains') {
     return normalizedText.includes(normalize(match.value));
   }
-  // regex: se evalua sobre el texto normalizado, sin flags peligrosas
+  // regex: el texto ya viene sin acentos, asi que al patron tambien se los sacamos.
   try {
-    return new RegExp(match.value, 'i').test(normalizedText);
+    return new RegExp(stripAccents(match.value), 'i').test(normalizedText);
   } catch {
     return false;
   }

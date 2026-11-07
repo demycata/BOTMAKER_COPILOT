@@ -1,13 +1,18 @@
 // Logica del side panel. Traduce clicks de la UI en mensajes al content script,
 // y pinta lo que el content reporta (progreso, reglas disparadas, logs).
 
-import type { AutomationRule, BulkActionId, BulkProgress, Shortcut } from '@/types';
+import type { DiagnosticReport } from '@/adapters/botmaker/actions';
+import type { AutomationRule, BulkActionId, BulkActionParams, BulkProgress, Shortcut } from '@/types';
 import type { ContentToPanel, Envelope } from '@/messaging';
 import { sendToContent, pingContent } from '@/messaging';
 import { get, set } from '@/storage';
 import { defaultAdvisorRule } from '@/core/rules-engine';
+import { comboFromEvent } from '@/core/shortcuts';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+const NOT_CONNECTED =
+  'No detecto la extension en esta pestania. Abri go.botmaker.com, recarga la pagina (F5) y reabri el panel.';
 
 // --- refs ---
 const selectionToggle = $<HTMLInputElement>('selection-toggle');
@@ -26,7 +31,12 @@ const ruleMatch = $<HTMLInputElement>('rule-match');
 const ruleReply = $<HTMLTextAreaElement>('rule-reply');
 const ruleAutosend = $<HTMLInputElement>('rule-autosend');
 const saveRuleBtn = $<HTMLButtonElement>('save-rule');
+const runDiagBtn = $<HTMLButtonElement>('run-diag');
 const logEl = $<HTMLUListElement>('log');
+
+/** Pestania donde corre el lote: cancelar debe llegar ahi aunque cambies de pestania. */
+let bulkTabId: number | undefined;
+let diagTimer: number | undefined;
 
 // --- Seleccion ---
 selectionToggle.addEventListener('change', () => {
@@ -49,36 +59,42 @@ actionSelect.addEventListener('change', () => {
   postponeSelect.classList.toggle('hidden', actionSelect.value !== 'postpone');
 });
 
-runBulkBtn.addEventListener('click', () => {
+function setBulkRunning(running: boolean): void {
+  runBulkBtn.disabled = running;
+  cancelBulkBtn.disabled = !running;
+}
+
+runBulkBtn.addEventListener('click', async () => {
   const actionId = actionSelect.value as BulkActionId;
-  let params: { text?: string; postponePath?: string[] } | undefined;
-  if (actionId === 'sendMessage') params = { text: actionText.value };
-  else if (actionId === 'postpone') params = { postponePath: POSTPONE_PATHS[postponeSelect.value] };
-  runBulkBtn.disabled = true;
-  cancelBulkBtn.disabled = false;
+  let params: BulkActionParams | undefined;
+  if (actionId === 'sendMessage') {
+    const text = actionText.value.trim();
+    if (!text) {
+      addLog('Escribi el mensaje a enviar.', 'fail');
+      return;
+    }
+    params = { text };
+  } else if (actionId === 'postpone') {
+    params = { postponePath: POSTPONE_PATHS[postponeSelect.value] };
+  }
+  setBulkRunning(true);
   progressBox.classList.remove('hidden');
-  void sendToContent({ kind: 'bulk:run', actionId, params });
+  progressFill.style.width = '0%';
+  progressLabel.textContent = '';
+  if (!(await sendToContent({ kind: 'bulk:run', actionId, params }))) {
+    setBulkRunning(false);
+    addLog(NOT_CONNECTED, 'fail');
+  }
 });
 
-cancelBulkBtn.addEventListener('click', () => {
-  void sendToContent({ kind: 'bulk:cancel' });
-  addLog('Cancelando lote…');
+cancelBulkBtn.addEventListener('click', async () => {
+  const sent = await sendToContent({ kind: 'bulk:cancel' }, bulkTabId);
+  addLog(sent ? 'Cancelando lote…' : 'No pude cancelar: se perdio la pestania.', sent ? '' : 'fail');
 });
 
 // --- Atajos ---
 const shortcutInputs = () =>
   Array.from(document.querySelectorAll<HTMLInputElement>('.shortcut-input'));
-
-function comboFromEvent(e: KeyboardEvent): string {
-  const parts: string[] = [];
-  if (e.ctrlKey) parts.push('ctrl');
-  if (e.altKey) parts.push('alt');
-  if (e.shiftKey) parts.push('shift');
-  if (e.metaKey) parts.push('meta');
-  const key = e.key.toLowerCase();
-  if (!['control', 'alt', 'shift', 'meta'].includes(key)) parts.push(key);
-  return parts.join('+');
-}
 
 const prettyCombo = (combo: string) =>
   combo
@@ -106,10 +122,8 @@ function buildShortcuts(): Shortcut[] {
   return list;
 }
 
-async function saveShortcuts(): Promise<void> {
-  const list = buildShortcuts();
-  await set('shortcuts', list);
-  void sendToContent({ kind: 'shortcuts:set', shortcuts: list });
+function saveShortcuts(): Promise<void> {
+  return set('shortcuts', buildShortcuts());
 }
 
 for (const inp of shortcutInputs()) {
@@ -134,37 +148,80 @@ for (const inp of shortcutInputs()) {
 postponeSelect.addEventListener('change', () => void saveShortcuts());
 
 // --- Reglas ---
-rulesToggle.addEventListener('change', () => {
-  void set('rulesEnabled', rulesToggle.checked);
-  void sendToContent({ kind: 'rules:enable', on: rulesToggle.checked });
+/** Guarda la regla del formulario. Devuelve false si esta incompleta. */
+async function saveRule(): Promise<boolean> {
+  const value = ruleMatch.value.trim();
+  const text = ruleReply.value.trim();
+  if (!value || !text) {
+    addLog('La regla necesita el texto a detectar y la respuesta.', 'fail');
+    return false;
+  }
+  const rule: AutomationRule = {
+    ...defaultAdvisorRule(),
+    match: { type: 'contains', value },
+    action: { type: 'sendMessage', text, autoSend: ruleAutosend.checked },
+  };
+  await set('rules', [rule]);
+  return true;
+}
+
+rulesToggle.addEventListener('change', async () => {
+  // Al activar se guarda lo que se ve en el formulario: es la regla que va a correr.
+  if (rulesToggle.checked && !(await saveRule())) {
+    rulesToggle.checked = false;
+    return;
+  }
+  await set('rulesEnabled', rulesToggle.checked);
 });
 
 saveRuleBtn.addEventListener('click', async () => {
-  const rule: AutomationRule = {
-    ...defaultAdvisorRule(),
-    match: { type: 'contains', value: ruleMatch.value.trim() },
-    action: {
-      type: 'sendMessage',
-      text: ruleReply.value,
-      autoSend: ruleAutosend.checked,
-    },
-  };
-  await set('rules', [rule]);
-  void sendToContent({ kind: 'rules:set', rules: [rule] });
-  addLog('Regla guardada.', 'ok');
+  if (await saveRule()) addLog('Regla guardada.', 'ok');
 });
 
+// --- Diagnostico ---
+runDiagBtn.addEventListener('click', async () => {
+  if (!(await sendToContent({ kind: 'diag:run' }))) {
+    addLog(NOT_CONNECTED, 'fail');
+    return;
+  }
+  diagTimer = window.setTimeout(
+    () => addLog('Diagnostico: no detecte la app de chats en esta pestania.', 'fail'),
+    1500,
+  );
+});
+
+function paintDiagnostic(report: DiagnosticReport): void {
+  window.clearTimeout(diagTimer);
+  const counts = Object.entries(report.counts).map(([key, n]) => `${key}: ${n}`);
+  const scroll = report.scroller.scrollable ? 'si' : report.scroller.found ? 'sin scroll' : 'no';
+  addLog(`Diagnostico | ${counts.join(' | ')} | lista scrolleable: ${scroll}`);
+}
+
 // --- Escucha de mensajes del content ---
-chrome.runtime.onMessage.addListener((envelope: Envelope) => {
+chrome.runtime.onMessage.addListener((envelope: Envelope, sender) => {
   if (envelope?.to !== 'panel') return;
   const msg = envelope.payload as ContentToPanel;
   switch (msg.kind) {
+    case 'state':
+      selectionToggle.checked = msg.selectionMode;
+      paintCounter(msg.count, msg.total);
+      setBulkRunning(msg.bulkRunning);
+      if (msg.bulkRunning) bulkTabId = sender.tab?.id;
+      break;
     case 'selection:changed':
-      selCount.textContent = String(msg.count);
-      selTotal.textContent = String(msg.total);
+      paintCounter(msg.count, msg.total);
       break;
     case 'bulk:progress':
+      bulkTabId = msg.progress.finished ? undefined : sender.tab?.id;
       paintProgress(msg.progress);
+      break;
+    case 'bulk:rejected':
+      setBulkRunning(false);
+      progressBox.classList.add('hidden');
+      addLog(msg.reason, 'fail');
+      break;
+    case 'diag:result':
+      paintDiagnostic(msg.report);
       break;
     case 'rule:fired':
       addLog(`Regla "${msg.ruleName}" -> ${msg.chatName}`, 'ok');
@@ -175,13 +232,18 @@ chrome.runtime.onMessage.addListener((envelope: Envelope) => {
   }
 });
 
+function paintCounter(count: number, total: number): void {
+  selCount.textContent = String(count);
+  selTotal.textContent = String(total);
+}
+
 function paintProgress(p: BulkProgress): void {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
   progressFill.style.width = `${pct}%`;
   if (p.finished) {
-    progressLabel.textContent = `Listo: ${p.done - p.failed} ok, ${p.failed} con error de ${p.total}.`;
-    runBulkBtn.disabled = false;
-    cancelBulkBtn.disabled = true;
+    const title = p.cancelled ? 'Cancelado' : 'Listo';
+    progressLabel.textContent = `${title}: ${p.done - p.failed} ok, ${p.failed} con error de ${p.total}.`;
+    setBulkRunning(false);
     // Volcar errores al log.
     p.results.filter((r) => !r.ok).forEach((r) => addLog(`${r.chatName}: ${r.error}`, 'fail'));
   } else {
@@ -201,17 +263,20 @@ function escapeHtml(s: string): string {
 }
 
 // --- Init: chequeo de salud + cargar estado guardado ---
-(async function init() {
-  const alive = await pingContent();
-  if (!alive) {
-    addLog(
-      'No detecto la extension en esta pestania. Abri go.botmaker.com, recarga la pagina (F5) y reabri el panel.',
-      'fail',
-    );
-  } else {
-    addLog('Conectado a la pestania de Botmaker.', 'ok');
-  }
 
+/** Sincroniza el panel con la pestania activa. */
+async function connectToTab(): Promise<void> {
+  if (await pingContent()) {
+    addLog('Conectado a la pestania de Botmaker.', 'ok');
+    void sendToContent({ kind: 'state:query' });
+  } else {
+    addLog(NOT_CONNECTED, 'fail');
+  }
+}
+
+chrome.tabs.onActivated.addListener(() => void connectToTab());
+
+(async function init() {
   const [rules, rulesEnabled, shortcuts] = await Promise.all([
     get('rules'),
     get('rulesEnabled'),
@@ -231,8 +296,12 @@ function escapeHtml(s: string): string {
       inp.value = prettyCombo(sc.combo);
     }
   }
-  void sendToContent({ kind: 'rules:set', rules });
-  void sendToContent({ kind: 'rules:enable', on: rulesEnabled });
-  void sendToContent({ kind: 'shortcuts:set', shortcuts });
-  void sendToContent({ kind: 'selection:query' });
+  // Recuperar la duracion del atajo de posponer, para no pisarla al guardar otro atajo.
+  const savedPath = shortcuts.find((s) => s.actionId === 'postpone')?.params?.postponePath;
+  const savedDuration = Object.keys(POSTPONE_PATHS).find(
+    (key) => POSTPONE_PATHS[key].join() === savedPath?.join(),
+  );
+  if (savedDuration) postponeSelect.value = savedDuration;
+
+  await connectToTab();
 })();

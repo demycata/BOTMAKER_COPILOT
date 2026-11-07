@@ -1,20 +1,15 @@
 # Copilot for Botmaker
 
 Extension de Chrome (Manifest V3) que le agrega a Botmaker un panel lateral con
-**seleccion multiple de chats**, **acciones masivas** y un **motor de reglas**
-(ej: cuando el cliente escribe "hablar con asesor", responder o dejar escrito un
-mensaje). Opera 100% sobre el DOM, simulando a un operador. No usa la API ni la
-IA de Botmaker.
-
-Esta es la **primera fase**: la maquinaria completa esta hecha; falta un unico
-paso de calibracion (ver mas abajo) para que enganche con el HTML real de tu
-Botmaker.
+**seleccion multiple de chats**, **acciones masivas**, un **motor de reglas** y
+**atajos de teclado**. Opera 100% sobre el DOM, simulando a un operador. No usa
+la API ni la IA de Botmaker.
 
 ## Instalacion
 
 ```bash
 npm install
-npm run build      # genera la carpeta dist/
+npm run build      # typecheck + genera la carpeta dist/
 ```
 
 Despues, en Chrome:
@@ -24,53 +19,65 @@ Despues, en Chrome:
 3. **Cargar descomprimida** (Load unpacked) y elegir la carpeta `dist/`
 4. Abrir Botmaker. Clickear el icono de la extension abre el panel lateral.
 
-Para desarrollo: `npm run dev` deja esbuild en modo watch (rebuild automatico).
-Tras cada cambio, en `chrome://extensions` tocá "Actualizar" en la extension y
+## Desarrollo
+
+```bash
+npm run dev        # esbuild en modo watch
+npm test           # tests
+npm run typecheck
+```
+
+Tras cada cambio, en `chrome://extensions` toca "Actualizar" en la extension y
 recarga la pagina de Botmaker (F5).
+
+Los tests corren contra una simulacion de Botmaker ([tests/fake-botmaker.ts](tests/fake-botmaker.ts))
+que recicla los nodos de la lista como lo hace la pagina real. No reemplazan
+probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 
 > Nota de build: se usa **esbuild** (no Vite/CRXJS). El content script se compila
 > como un bundle IIFE autocontenido para que corra en el mundo aislado sin que el
 > CSP de Botmaker bloquee su carga. Con el loader dinamico de CRXJS el content no
 > llegaba a ejecutarse en go.botmaker.com.
 
-## Estado: calibrado y completo
+## Que hace
 
-Todos los selectores estan ajustados al HTML real de tu Botmaker
-(`.customers-list`, `.customer-item`, `.customer-name`, `.text-entry-left`,
-`#input-component`, `#send-button-component`, `button[aria-label="Acciones de Chat"]`,
-el menu `ul.MuiMenu-list`, etc.). Funciona:
+- **Seleccion multiple** con checkboxes en la lista y contador. La seleccion se
+  mantiene al scrollear.
+- **Todo** recorre la lista entera, incluidas las conversaciones que no estan en
+  pantalla. Corta a los 60 segundos y avisa si pudo quedar alguna afuera.
+- **Acciones masivas**: Liberar, Posponer, Cerrar (consulta resuelta) y Enviar
+  mensaje. Los chats que salen bien se desmarcan; los que fallan quedan
+  seleccionados para reintentar.
+- **Regla** "si el mensaje contiene X, responder Y", que deja el texto escrito o
+  lo envia segun el toggle. Funciona con el panel cerrado y tras recargar.
+- **Atajos** para liberar, posponer y cerrar la conversacion abierta.
+- **Diagnostico**: el boton de la seccion Actividad muestra cuantos elementos
+  encuentra cada selector en la pagina. Solo lee y no incluye datos de clientes.
 
-- **Seleccion multiple** sobre las conversaciones visibles, con contador.
-- **Liberar** / **Transferir** / **Asignar a cola** / **Marcar spam** (via el menu
-  de acciones de cada conversacion).
-- **Enviar mensaje** masivo y la **regla "Hablar con Asesor"** (detecta el mensaje
-  entrante y responde o deja el texto escrito, segun el toggle de auto-envio).
+## Protecciones
 
-Unica accion con un paso pendiente: **Posponer** abre un submenu para elegir la
-duracion; ese segundo paso queda por calibrar cuando tengas a mano el HTML del
-submenu de tiempos. Las demas acciones son de un click y ya andan.
+- Antes de actuar confirma que la conversacion abierta es la pedida y que cargo
+  su hilo. Si no puede confirmarlo, ese chat falla y el lote sigue.
+- Una regla nunca pisa un borrador del operador. Tampoco corre durante una accion
+  masiva, ni repite una respuesta que ya figura en el chat.
+- Si ya hay mensajes despues del cliente, una regla con auto-envio deja el texto
+  escrito en vez de enviarlo: el chat puede estar ya atendido. Los selectores
+  actuales no distinguen si esos mensajes son de un operador o del bot.
+- Una accion cuenta como exitosa solo si se ve su efecto: el cuadro de texto se
+  vacia al enviar, y el menu o el dialogo se cierran al liberar, posponer o cerrar.
 
-## Limitacion importante: la lista es virtualizada
+## La lista es virtualizada
 
-Tu lista de chats usa **react-virtualized**: el navegador solo tiene en memoria
-las filas que se VEN; al scrollear, recicla los nodos. Consecuencias:
+La lista usa **react-virtualized**: solo existen en el DOM las filas visibles y
+los mismos nodos se reciclan para mostrar otras conversaciones. Por eso:
 
-- **"Seleccionar todo" abarca solo lo renderizado**, no las 200 conversaciones de
-  la cola. Para incluir mas hay que ir scrolleando (o, mas adelante, agregar un
-  auto-scroll que las materialice; es mas fragil).
-- En una accion masiva, tras abrir un chat la lista puede re-renderizar. Por eso
-  el adapter **re-resuelve cada conversacion por su id** antes de operar. Si una
-  quedo fuera de vista, ese item falla de forma controlada (se registra y sigue).
-- El **motor de reglas no se ve afectado**: opera sobre la conversacion abierta.
-
-## Que funciona hoy
-
-- Panel lateral oscuro con: modo seleccion, contador, todo/ninguno/invertir,
-  selector de accion masiva, barra de progreso, editor de la regla y log.
-- Toda la logica independiente del DOM: estado de seleccion, cola de acciones
-  con manejo de errores por chat + resumen, y evaluacion de reglas.
-- Mensajeria tipada panel <-> background <-> content.
-- Persistencia de la regla y su estado en `chrome.storage.local`.
+- Una conversacion se identifica siempre por el id de su fila, nunca por una
+  referencia guardada al nodo.
+- Para llegar a una conversacion fuera de pantalla se scrollea la lista hasta
+  encontrarla. Si no aparece (se cerro o cambiaste de vista), ese chat falla con
+  un mensaje y el lote sigue.
+- Con la pestania en segundo plano Chrome puede no renderizar el scroll, asi que
+  conviene dejar Botmaker visible durante un lote.
 
 ## Estructura
 
@@ -79,20 +86,24 @@ src/
   adapters/botmaker/   # UNICA capa acoplada a Botmaker (selectors + acciones + dom utils)
   core/                # logica pura: seleccion, cola de acciones, motor de reglas
   content/             # content script: pega todo con el DOM real
-  background/          # service worker: relay de mensajes + abre el panel
+  background/          # service worker: abre el panel
   sidepanel/           # UI del panel (html + css + ts)
-  messaging/           # contrato tipado de mensajes
+  messaging/           # contrato tipado de mensajes panel <-> content
   storage/             # wrapper de chrome.storage.local
   types/               # tipos de dominio
+tests/                 # tests y simulacion de Botmaker
 ```
+
+Si Botmaker cambia su HTML, lo que hay que tocar esta en
+[selectors.ts](src/adapters/botmaker/selectors.ts). Empeza por el boton
+Diagnostico: un selector en 0 indica que hay que recalibrarlo. Los de menu y
+dialogo dan 0 mientras no esten abiertos.
 
 ## Notas tecnicas
 
 - El service worker de MV3 es efimero; por eso la orquestacion de lotes y el
   motor de reglas viven en el content script (que dura lo que dure la pestania).
-- Las acciones se disparan de a una, con pausa entre chats y try/catch por chat:
-  un fallo no frena el lote.
-- Las acciones que usan modales (agregar/quitar etiqueta) quedan marcadas como
-  pendientes de calibrar, porque dependen de un flujo multi-paso del DOM.
+- La configuracion vive en `chrome.storage.local`: el panel la escribe y el
+  content la lee y escucha sus cambios.
 - Automatizar Botmaker via DOM puede chocar con sus terminos de servicio; queda
   a tu criterio.

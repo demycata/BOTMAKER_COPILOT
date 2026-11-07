@@ -3,7 +3,7 @@
 // lote: se registra y sigue. Al final emite un resumen.
 //
 // Es "agnostico" al adapter: recibe las funciones openChat/runAction inyectadas,
-// asi se testea sin DOM y se reusa para otros paneles el dia de manana.
+// asi se testea sin DOM.
 
 import type {
   BulkActionId,
@@ -22,8 +22,13 @@ export interface BulkDeps {
 
 export class BulkRunner {
   private cancelled = false;
+  private active = false;
 
   constructor(private deps: BulkDeps) {}
+
+  get running(): boolean {
+    return this.active;
+  }
 
   cancel(): void {
     this.cancelled = true;
@@ -36,50 +41,47 @@ export class BulkRunner {
     onProgress: (p: BulkProgress) => void,
   ): Promise<BulkProgress> {
     this.cancelled = false;
+    this.active = true;
     const results: BulkItemResult[] = [];
     const delay = this.deps.delayMs ?? 350;
 
-    const report = (currentChatName?: string, finished = false) => {
-      onProgress({
-        actionId,
-        total: chats.length,
-        done: results.length,
-        failed: results.filter((r) => !r.ok).length,
-        currentChatName,
-        finished,
-        results: [...results],
-      });
-    };
-
-    report(undefined, false);
-
-    for (const chat of chats) {
-      if (this.cancelled) break;
-      report(chat.name);
-      try {
-        await this.deps.openChat(chat);
-        await this.deps.runAction(actionId, params);
-        results.push({ chatId: chat.id, chatName: chat.name, ok: true });
-      } catch (err) {
-        results.push({
-          chatId: chat.id,
-          chatName: chat.name,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      await sleep(delay);
-    }
-
-    report(undefined, true);
-    return {
+    const snapshot = (currentChatName?: string, finished = false): BulkProgress => ({
       actionId,
       total: chats.length,
       done: results.length,
       failed: results.filter((r) => !r.ok).length,
-      finished: true,
-      results,
-    };
+      currentChatName,
+      finished,
+      cancelled: this.cancelled,
+      results: [...results],
+    });
+
+    try {
+      onProgress(snapshot());
+      for (const chat of chats) {
+        if (this.cancelled) break;
+        onProgress(snapshot(chat.name));
+        try {
+          await this.deps.openChat(chat);
+          await this.deps.runAction(actionId, params);
+          results.push({ chatId: chat.id, chatName: chat.name, ok: true });
+        } catch (err) {
+          results.push({
+            chatId: chat.id,
+            chatName: chat.name,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        await sleep(delay);
+      }
+    } finally {
+      this.active = false;
+    }
+
+    const final = snapshot(undefined, true);
+    onProgress(final);
+    return final;
   }
 }
 

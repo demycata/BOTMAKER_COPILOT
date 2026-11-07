@@ -14,6 +14,12 @@ export const SELECTORS = {
   /** Grid virtualizado que contiene la lista de conversaciones. */
   chatList: ['.customers-list', '.ReactVirtualized__List'],
 
+  /** Contenedor interno de las filas; su padre es el elemento que scrollea. */
+  chatListInner: ['.ReactVirtualized__Grid__innerScrollContainer'],
+
+  /** Contenido de cada fila (dentro del wrapper con id). */
+  chatRow: ['.customer-item'],
+
   /** Wrapper posicionado de cada fila: su id ES el id de la conversacion. */
   chatItem: ['.ReactVirtualized__Grid__innerScrollContainer > div[id]'],
 
@@ -34,6 +40,9 @@ export const SELECTORS = {
   /** Marca de mensaje ENTRANTE (del cliente). */
   incomingMessageMarker: ['.text-entry-left'],
 
+  /** Marca de mensaje SALIENTE (operador o bot). */
+  outgoingMessageMarker: ['.text-entry-right'],
+
   /** Contenedor del texto dentro de una burbuja. */
   messageBody: ['.render-text-message-body', '.inline-text'],
 
@@ -53,6 +62,15 @@ export const SELECTORS = {
 
   /** Items del menu. */
   actionsMenuItem: ['li.MuiMenuItem-root[role="menuitem"]'],
+
+  /** Cualquier menu abierto, incluidos los submenus. */
+  anyMenu: ['ul.MuiMenu-list'],
+
+  /** Item de cualquier menu abierto. */
+  anyMenuItem: ['li[role="menuitem"]'],
+
+  /** Texto principal de un item de menu. */
+  menuItemText: ['.MuiListItemText-primary'],
 
   // --- Cerrar conversacion (boton propio + dialogo, no via menu) ---
 
@@ -76,6 +94,8 @@ export const SELECTORS = {
 
 export const MENU_ITEMS = {
   // "Liberar chat asignado a <me/nombre>" -> el span interno tiene id estable.
-  release: { anchorId: 'ChatsToolbar.lockChat', text: 'Liberar chat asignado' },
+  // El ancla podria ser la misma cuando el chat no esta asignado, por eso `guard`
+  // exige que el item diga "liberar" antes de clickearlo.
+  release: { anchorId: 'ChatsToolbar.lockChat', text: 'Liberar chat asignado', guard: 'liberar' },
   postpone: { text: 'Posponer atencion' }, // submenu: requiere elegir duracion
 } as const;

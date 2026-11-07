@@ -1,27 +1,31 @@
-// Estado de seleccion multiple. No sabe de Botmaker: solo maneja un Set de ids
-// y notifica cambios. El content script lo conecta con las filas reales.
+// Estado de seleccion multiple. No sabe de Botmaker: maneja ids y notifica cambios.
+//
+// La lista de Botmaker es virtualizada: una conversacion que sale de pantalla
+// desaparece del DOM pero sigue existiendo. Por eso el store ACUMULA lo que va
+// viendo y nunca descarta una conversacion solo porque dejo de estar visible.
 
 import type { ChatRef } from '@/types';
 
 export class SelectionStore {
   private selected = new Set<string>();
+  private known = new Map<string, ChatRef>();
   private listeners = new Set<(count: number, total: number) => void>();
-  private universe: ChatRef[] = [];
 
-  /** Actualiza el universo de chats disponibles (lo que hay en la lista). */
-  setUniverse(chats: ChatRef[]): void {
-    this.universe = chats;
-    // Descartamos seleccionados que ya no existen.
-    const ids = new Set(chats.map((c) => c.id));
-    for (const id of [...this.selected]) {
-      if (!ids.has(id)) this.selected.delete(id);
-    }
-    this.emit();
+  /** Suma las conversaciones visibles a las conocidas (sin guardar nodos del DOM). */
+  merge(chats: ChatRef[]): void {
+    const before = this.known.size;
+    for (const { id, name, offset } of chats) this.known.set(id, { id, name, offset });
+    if (this.known.size !== before) this.emit();
   }
 
-  toggle(id: string): void {
-    if (this.selected.has(id)) this.selected.delete(id);
-    else this.selected.add(id);
+  /** Tras recorrer la lista completa: olvida lo que ya no esta en ella. */
+  retainOnly(ids: Set<string>): void {
+    for (const id of [...this.known.keys()]) {
+      if (!ids.has(id)) {
+        this.known.delete(id);
+        this.selected.delete(id);
+      }
+    }
     this.emit();
   }
 
@@ -31,8 +35,13 @@ export class SelectionStore {
     this.emit();
   }
 
+  unselect(ids: string[]): void {
+    ids.forEach((id) => this.selected.delete(id));
+    this.emit();
+  }
+
   selectAll(): void {
-    this.universe.forEach((c) => this.selected.add(c.id));
+    for (const id of this.known.keys()) this.selected.add(id);
     this.emit();
   }
 
@@ -43,10 +52,17 @@ export class SelectionStore {
 
   invert(): void {
     const next = new Set<string>();
-    for (const c of this.universe) {
-      if (!this.selected.has(c.id)) next.add(c.id);
+    for (const id of this.known.keys()) {
+      if (!this.selected.has(id)) next.add(id);
     }
     this.selected = next;
+    this.emit();
+  }
+
+  /** Olvida todo: seleccion y conversaciones conocidas. */
+  reset(): void {
+    this.selected.clear();
+    this.known.clear();
     this.emit();
   }
 
@@ -54,9 +70,8 @@ export class SelectionStore {
     return this.selected.has(id);
   }
 
-  /** Devuelve los ChatRef seleccionados, en el orden del universo. */
   getSelected(): ChatRef[] {
-    return this.universe.filter((c) => this.selected.has(c.id));
+    return [...this.known.values()].filter((c) => this.selected.has(c.id));
   }
 
   get count(): number {
@@ -64,7 +79,7 @@ export class SelectionStore {
   }
 
   get total(): number {
-    return this.universe.length;
+    return this.known.size;
   }
 
   onChange(fn: (count: number, total: number) => void): () => void {
@@ -73,6 +88,6 @@ export class SelectionStore {
   }
 
   private emit(): void {
-    for (const fn of this.listeners) fn(this.selected.size, this.universe.length);
+    for (const fn of this.listeners) fn(this.selected.size, this.known.size);
   }
 }

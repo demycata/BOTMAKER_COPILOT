@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Copilot for Botmaker</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand">Copilot</span>
+      <span class="brand-sub">for Botmaker</span>
+    </header>
+
+    <main class="panel">
+      <!-- Seleccion -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Seleccion</h2>
+          <label class="switch">
+            <input type="checkbox" id="selection-toggle" />
+            <span>Modo seleccion</span>
+          </label>
+        </div>
+        <div class="counter">
+          <strong id="sel-count">0</strong> de <span id="sel-total">0</span> seleccionados
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="sel-all">Todo</button>
+          <button class="btn" id="sel-none">Ninguno</button>
+          <button class="btn" id="sel-invert">Invertir</button>
+        </div>
+      </section>
+
+      <!-- Acciones masivas -->
+      <section class="card">
+        <div class="card-head"><h2>Accion masiva</h2></div>
+        <select id="action-select" class="select">
+          <option value="release">Liberar chat</option>
+          <option value="postpone">Posponer</option>
+          <option value="close">Cerrar (consulta resuelta)</option>
+          <option value="sendMessage">Enviar mensaje…</option>
+        </select>
+        <textarea
+          id="action-text"
+          class="textarea hidden"
+          rows="3"
+          placeholder="Texto del mensaje a enviar"
+        ></textarea>
+        <select id="postpone-select" class="select hidden">
+          <option value="4h">Por 4 horas</option>
+          <option value="8h">Por 8 horas</option>
+          <option value="12h">Por 12 horas</option>
+          <option value="forever">Por siempre</option>
+        </select>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="run-bulk">Ejecutar</button>
+          <button class="btn" id="cancel-bulk" disabled>Cancelar</button>
+        </div>
+        <div class="progress hidden" id="progress-box">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+          <div class="progress-label" id="progress-label"></div>
+        </div>
+      </section>
+
+      <!-- Reglas -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Reglas</h2>
+          <label class="switch">
+            <input type="checkbox" id="rules-toggle" />
+            <span>Activar</span>
+          </label>
+        </div>
+        <p class="hint">
+          Cuando el ultimo mensaje del cliente coincide, se dispara la accion.
+        </p>
+        <div class="field">
+          <label>Si el mensaje contiene</label>
+          <input type="text" id="rule-match" class="input" value="hablar con asesor" />
+        </div>
+        <div class="field">
+          <label>Responder con</label>
+          <textarea id="rule-reply" class="textarea" rows="3">En un momento te derivo con un asesor. Gracias por tu paciencia.</textarea>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="rule-autosend" />
+          <span>Enviar automaticamente (si no, solo lo deja escrito)</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="save-rule">Guardar regla</button>
+        </div>
+      </section>
+
+      <!-- Atajos -->
+      <section class="card">
+        <div class="card-head"><h2>Atajos (chat actual)</h2></div>
+        <p class="hint">
+          Clickeá un campo y presioná la combinación (ej. Ctrl+Shift+L). Actúan
+          sobre la conversación abierta. Backspace borra.
+        </p>
+        <div class="field">
+          <label>Liberar</label>
+          <input class="input shortcut-input" data-action="release" readonly placeholder="Sin asignar" />
+        </div>
+        <div class="field">
+          <label>Posponer (usa la duración de arriba)</label>
+          <input class="input shortcut-input" data-action="postpone" readonly placeholder="Sin asignar" />
+        </div>
+        <div class="field">
+          <label>Cerrar (consulta resuelta)</label>
+          <input class="input shortcut-input" data-action="close" readonly placeholder="Sin asignar" />
+        </div>
+      </section>
+
+      <!-- Actividad -->
+      <section class="card">
+        <div class="card-head"><h2>Actividad</h2></div>
+        <ul class="log" id="log"></ul>
+      </section>
+    </main>
+
+    <script src="./main.js"></script>
+  </body>
+</html>

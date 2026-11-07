@@ -10,6 +10,8 @@ export interface ChatRef {
   el?: HTMLElement;
   /** Posicion vertical en la lista, pista para volver a encontrarla al scrollear. */
   offset?: number;
+  /** Ultimo mensaje que muestra la fila en la lista. */
+  lastMessage?: string;
 }
 
 /** Acciones masivas disponibles. Cada una se mapea a un handler en el adapter. */
@@ -26,6 +28,8 @@ export interface BulkActionParams {
   postponePath?: string[];
   /** Tipo de conversacion al cerrar, ej. 'Consulta resuelta'. */
   closeType?: string;
+  /** Solo actua si el ultimo mensaje del chat es del operador y empieza con este texto. */
+  requireLastMessage?: string;
 }
 
 /** Resultado del procesamiento de un chat dentro de un lote. */
@@ -33,6 +37,8 @@ export interface BulkItemResult {
   chatId: string;
   chatName: string;
   ok: boolean;
+  /** No se actuo porque el chat no cumplia la condicion; no es un error. */
+  skipped?: boolean;
   error?: string;
 }
 
@@ -42,6 +48,7 @@ export interface BulkProgress {
   total: number;
   done: number;
   failed: number;
+  skipped: number;
   currentChatName?: string;
   finished: boolean;
   cancelled: boolean;

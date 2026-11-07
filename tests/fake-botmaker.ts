@@ -2,6 +2,11 @@
 // DOM real, sobre todo la lista virtualizada que RECICLA los mismos nodos para
 // mostrar conversaciones distintas al scrollear.
 
+export interface FakeMessage {
+  from: 'client' | 'agent' | 'bot';
+  text: string;
+}
+
 export interface FakeOptions {
   chats?: number;
   visible?: number;
@@ -10,7 +15,7 @@ export interface FakeOptions {
   /** Demora adicional hasta que aparece el hilo de la conversacion. */
   threadDelay?: number;
   /** Mensajes de cada chat; por defecto un saludo distinto por chat. */
-  messages?: (id: string) => { from: 'client' | 'agent'; text: string }[];
+  messages?: (id: string) => FakeMessage[];
 }
 
 const ROW_HEIGHT = 50;
@@ -18,7 +23,7 @@ const ROW_HEIGHT = 50;
 export function mountFakeBotmaker(options: FakeOptions = {}) {
   const { chats = 12, visible = 4, openDelay = 10, threadDelay = 0 } = options;
   const messages =
-    options.messages ?? ((id: string) => [{ from: 'client' as const, text: `Hola desde ${id}` }]);
+    options.messages ?? ((id: string): FakeMessage[] => [{ from: 'client', text: `Hola desde ${id}` }]);
 
   Element.prototype.scrollIntoView = () => undefined;
   document.body.innerHTML = `
@@ -37,10 +42,14 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
   const sendBtn = document.querySelector<HTMLElement>('#send-button-component')!;
   const menuBtn = document.querySelector<HTMLElement>('[aria-label="Acciones de Chat"]')!;
 
+  const ids = Array.from({ length: chats }, (_, i) => `chat-${i}`);
   const state = {
     openId: null as string | null,
+    /** Veces que se abrio un chat con un click en su fila. */
+    opened: [] as string[],
     sent: [] as { chatId: string | null; text: string }[],
     released: [] as (string | null)[],
+    postponed: [] as (string | null)[],
     /** La pagina ignora los clicks en las filas. */
     brokenOpen: false,
     /** El boton de enviar no hace nada. */
@@ -50,14 +59,14 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
   };
 
   let top = 0;
-  const height = chats * ROW_HEIGHT;
+  const height = () => ids.length * ROW_HEIGHT;
   const clientHeight = visible * ROW_HEIGHT;
   Object.defineProperty(scroller, 'clientHeight', { get: () => clientHeight });
-  Object.defineProperty(scroller, 'scrollHeight', { get: () => height });
+  Object.defineProperty(scroller, 'scrollHeight', { get: height });
   Object.defineProperty(scroller, 'scrollTop', {
     get: () => top,
     set(value: number) {
-      top = Math.max(0, Math.min(value, height - clientHeight));
+      top = Math.max(0, Math.min(value, height() - clientHeight));
       render();
     },
   });
@@ -67,7 +76,10 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     const row = document.createElement('div');
     row.innerHTML = `
       <div class="customer-item">
-        <div class="customer-main" role="button"><span class="customer-name"></span></div>
+        <div class="customer-main" role="button">
+          <span class="customer-name"></span>
+          <div class="customer-last-message"></div>
+        </div>
       </div>`;
     row.querySelector('.customer-main')!.addEventListener('click', () => {
       if (!state.brokenOpen) open(row.id);
@@ -79,27 +91,51 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
   function render(): void {
     const first = Math.floor(top / ROW_HEIGHT);
     pool.forEach((row, i) => {
-      const index = first + i;
-      const id = `chat-${index}`;
+      const id = ids[first + i];
+      if (!id) {
+        row.removeAttribute('id');
+        row.style.display = 'none';
+        return;
+      }
+      row.style.display = '';
       row.id = id;
-      row.style.top = `${index * ROW_HEIGHT}px`;
-      row.querySelector('.customer-name')!.textContent = `Cliente ${index}`;
+      row.style.top = `${(first + i) * ROW_HEIGHT}px`;
+      row.querySelector('.customer-name')!.textContent = `Cliente ${id.slice(5)}`;
+      row.querySelector('.customer-last-message')!.textContent = messages(id).at(-1)?.text ?? '';
       row.querySelector('.customer-item')!.classList.toggle('selected', state.openId === id);
     });
   }
 
+  function renderBubble(m: FakeMessage): HTMLElement {
+    const bubble = document.createElement('div');
+    bubble.className = m.from === 'client' ? 'text-entry-left' : 'text-entry-right';
+    // Como en Botmaker: el nombre de quien envia va antes del texto.
+    const sender =
+      m.from === 'client'
+        ? ''
+        : `<div class="entries-li-sentby-container">
+             <div class="entries-li-sentby from-${m.from === 'agent' ? 'human' : 'bot'}">
+               <span>Remitente</span>
+             </div>
+           </div>`;
+    bubble.innerHTML = `
+      <div class="render-text-message-body">
+        ${sender}
+        <div class="inline-text">
+          <div class="rule-message-all-container"><div class="rule-message-line"></div></div>
+          <div class="sent-tildes-container"><span class="sent-tilde-time">10:00</span></div>
+        </div>
+      </div>`;
+    bubble.querySelector('.rule-message-line')!.textContent = m.text;
+    return bubble;
+  }
+
   function renderThread(id: string): void {
-    thread.innerHTML = '';
-    for (const m of messages(id)) {
-      const bubble = document.createElement('div');
-      bubble.className = m.from === 'client' ? 'text-entry-left' : 'text-entry-right';
-      bubble.innerHTML = '<div class="render-text-message-body"></div>';
-      bubble.firstElementChild!.textContent = m.text;
-      thread.append(bubble);
-    }
+    thread.replaceChildren(...messages(id).map(renderBubble));
   }
 
   function open(id: string): void {
+    state.opened.push(id);
     setTimeout(() => {
       state.openId = id;
       render();
@@ -117,24 +153,57 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
     composer.value = '';
   });
 
-  menuBtn.addEventListener('click', () => {
+  const closeMenus = () => document.querySelectorAll('.MuiMenu-list').forEach((m) => m.remove());
+
+  function addMenu(items: { html: string; onClick: () => void }[]): void {
     const menu = document.createElement('ul');
     menu.className = 'MuiMenu-list';
     menu.setAttribute('role', 'menu');
-    const label = state.assigned ? 'Liberar chat asignado a Operador' : 'Tomar chat';
-    menu.innerHTML = `
-      <li class="MuiMenuItem-root" role="menuitem">
-        <span id="ChatsToolbar.lockChat">${label}</span>
-      </li>`;
-    menu.querySelector('li')!.addEventListener('click', () => {
-      if (state.assigned) state.released.push(state.openId);
-      menu.remove();
-    });
+    for (const item of items) {
+      const li = document.createElement('li');
+      li.className = 'MuiMenuItem-root';
+      li.setAttribute('role', 'menuitem');
+      li.innerHTML = item.html;
+      li.addEventListener('click', item.onClick);
+      menu.append(li);
+    }
     document.body.append(menu);
+  }
+
+  function postponeOpenChat(): void {
+    state.postponed.push(state.openId);
+    ids.splice(ids.indexOf(state.openId!), 1); // el chat pospuesto sale de la lista
+    state.openId = null;
+    thread.replaceChildren();
+    closeMenus();
+    scroller.scrollTop = top;
+  }
+
+  menuBtn.addEventListener('click', () => {
+    const label = state.assigned ? 'Liberar chat asignado a Operador' : 'Tomar chat';
+    addMenu([
+      {
+        html: `<span id="ChatsToolbar.lockChat">${label}</span>`,
+        onClick: () => {
+          if (state.assigned) state.released.push(state.openId);
+          closeMenus();
+        },
+      },
+      {
+        html: 'Posponer atención',
+        onClick: () =>
+          addMenu([
+            {
+              html: 'Horas',
+              onClick: () => addMenu([{ html: 'Por 4 horas', onClick: postponeOpenChat }]),
+            },
+          ]),
+      },
+    ]);
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') document.querySelector('.MuiMenu-list')?.remove();
+    if (e.key === 'Escape') closeMenus();
   });
 
   render();
@@ -150,6 +219,8 @@ export function mountFakeBotmaker(options: FakeOptions = {}) {
       render();
       renderThread(id);
     },
+    /** Vuelve a pintar la lista, por ejemplo tras llegar un mensaje nuevo. */
+    refreshList: render,
     checkboxFor: (id: string) =>
       document.getElementById(id)?.querySelector<HTMLInputElement>('.cbm-select-checkbox') ?? null,
   };

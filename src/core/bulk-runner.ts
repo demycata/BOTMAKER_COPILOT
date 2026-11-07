@@ -13,6 +13,9 @@ import type {
   ChatRef,
 } from '@/types';
 
+/** La accion lanza esto para saltear un chat que no cumple la condicion. */
+export class SkipChat extends Error {}
+
 export interface BulkDeps {
   openChat: (chat: ChatRef) => Promise<void>;
   runAction: (actionId: BulkActionId, params?: BulkActionParams) => Promise<void>;
@@ -49,7 +52,8 @@ export class BulkRunner {
       actionId,
       total: chats.length,
       done: results.length,
-      failed: results.filter((r) => !r.ok).length,
+      failed: results.filter((r) => !r.ok && !r.skipped).length,
+      skipped: results.filter((r) => r.skipped).length,
       currentChatName,
       finished,
       cancelled: this.cancelled,
@@ -70,6 +74,7 @@ export class BulkRunner {
             chatId: chat.id,
             chatName: chat.name,
             ok: false,
+            skipped: err instanceof SkipChat,
             error: err instanceof Error ? err.message : String(err),
           });
         }

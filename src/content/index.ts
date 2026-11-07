@@ -10,9 +10,10 @@ import type { Envelope, PanelToContent } from '@/messaging';
 import { sendToPanel } from '@/messaging';
 import { get } from '@/storage';
 import { SelectionStore } from '@/core/selection-store';
-import { BulkRunner } from '@/core/bulk-runner';
+import { BulkRunner, SkipChat } from '@/core/bulk-runner';
 import { evaluate, RuleFireLog } from '@/core/rules-engine';
 import { comboFromEvent } from '@/core/shortcuts';
+import { startsWithText } from '@/core/text';
 import { debounceMax } from '@/core/timing';
 import * as bm from '@/adapters/botmaker/actions';
 import { SELECTORS } from '@/adapters/botmaker/selectors';
@@ -46,7 +47,17 @@ function ensureStyles(): void {
 }
 
 const selection = new SelectionStore();
-const bulk = new BulkRunner({ openChat: bm.openChat, runAction: bm.runAction });
+
+/** Ejecuta la accion solo si el chat, ya abierto, sigue cumpliendo la condicion. */
+async function runGuardedAction(actionId: BulkActionId, params?: BulkActionParams): Promise<void> {
+  const required = params?.requireLastMessage;
+  if (required && !bm.lastMessageIsOperatorText(required)) {
+    throw new SkipChat('Ya no cumple: el ultimo mensaje no es tu saludo');
+  }
+  await bm.runAction(actionId, params);
+}
+
+const bulk = new BulkRunner({ openChat: bm.openChat, runAction: runGuardedAction });
 const fireLog = new RuleFireLog();
 
 let selectionMode = false;
@@ -57,6 +68,8 @@ let lastFingerprint = ''; // id-conversacion + texto, para no re-disparar reglas
 let lastOpenChat: ChatRef | null = null;
 let scanning = false; // recorriendo la lista para "Todo"
 let ruleInFlight = false;
+let postponeCandidates: ChatRef[] = [];
+let postponeGreeting = '';
 
 // Con all_frames:true el content corre en varios frames (el principal y el
 // iframe "bmchildf" que tiene la app de chats). Solo el frame que realmente ve
@@ -172,6 +185,49 @@ async function runBulk(actionId: BulkActionId, params?: BulkActionParams): Promi
   );
   // Quedan seleccionados solo los que fallaron, listos para reintentar.
   selection.unselect(result.results.filter((r) => r.ok).map((r) => r.chatId));
+}
+
+// --- Posponer todo ---
+
+/**
+ * Busca los chats cuyo ultimo mensaje es el saludo. Usa lo que muestra la lista,
+ * asi no abre ningun chat ni los marca como leidos.
+ */
+async function scanForPostpone(greeting: string): Promise<void> {
+  if (isBusy()) {
+    sendToPanel({ kind: 'bulk:rejected', reason: 'Ya hay un proceso en curso.' });
+    return;
+  }
+  scanning = true;
+  try {
+    const { chats, complete } = await bm.collectAllChats();
+    postponeCandidates = chats
+      .filter((c) => startsWithText(c.lastMessage ?? '', greeting))
+      .map(({ id, name, offset }) => ({ id, name, offset }));
+    postponeGreeting = greeting;
+    sendToPanel({
+      kind: 'postpone:preview',
+      names: postponeCandidates.map((c) => c.name),
+      total: chats.length,
+      complete,
+    });
+  } catch (err) {
+    sendToPanel({ kind: 'bulk:rejected', reason: (err as Error).message });
+  } finally {
+    scanning = false;
+  }
+}
+
+async function confirmPostpone(postponePath: string[]): Promise<void> {
+  const chats = postponeCandidates;
+  postponeCandidates = [];
+  if (isBusy() || !chats.length) {
+    sendToPanel({ kind: 'bulk:rejected', reason: 'No hay chats para posponer.' });
+    return;
+  }
+  await bulk.run(chats, 'postpone', { postponePath, requireLastMessage: postponeGreeting }, (p) =>
+    sendToPanel({ kind: 'bulk:progress', progress: p }),
+  );
 }
 
 // --- Motor de reglas (sobre la conversacion abierta) ---
@@ -355,6 +411,15 @@ chrome.runtime.onMessage.addListener((envelope: Envelope, _sender, sendResponse)
       break;
     case 'bulk:cancel':
       bulk.cancel();
+      break;
+    case 'postpone:scan':
+      void scanForPostpone(msg.greeting);
+      break;
+    case 'postpone:confirm':
+      void confirmPostpone(msg.postponePath);
+      break;
+    case 'postpone:discard':
+      postponeCandidates = [];
       break;
     case 'diag:run':
       sendToPanel({ kind: 'diag:result', report: bm.diagnose() });

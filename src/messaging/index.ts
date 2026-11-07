@@ -19,6 +19,9 @@ export type PanelToContent =
   | { kind: 'selection:invert' }
   | { kind: 'bulk:run'; actionId: BulkActionId; params?: BulkActionParams }
   | { kind: 'bulk:cancel' }
+  | { kind: 'postpone:scan'; greeting: string }
+  | { kind: 'postpone:confirm'; postponePath: string[] }
+  | { kind: 'postpone:discard' }
   | { kind: 'diag:run' };
 
 // --- Content -> Panel ---
@@ -27,6 +30,7 @@ export type ContentToPanel =
   | { kind: 'selection:changed'; count: number; total: number }
   | { kind: 'bulk:progress'; progress: BulkProgress }
   | { kind: 'bulk:rejected'; reason: string }
+  | { kind: 'postpone:preview'; names: string[]; total: number; complete: boolean }
   | { kind: 'rule:fired'; ruleName: string; chatName: string }
   | { kind: 'diag:result'; report: DiagnosticReport }
   | { kind: 'log'; text: string };

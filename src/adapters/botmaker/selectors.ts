@@ -29,6 +29,9 @@ export const SELECTORS = {
   /** Elemento clickeable que abre la conversacion (evita los de sesiones). */
   chatOpen: ['.customer-item > .customer-main[role="button"]', '.customer-main[role="button"]'],
 
+  /** Ultimo mensaje que muestra la fila, sin necesidad de abrir el chat. */
+  chatLastMessage: ['.customer-last-message'],
+
   /** Marca de la fila actualmente abierta/seleccionada. */
   chatSelected: ['.customer-item.selected'],
 
@@ -42,6 +45,12 @@ export const SELECTORS = {
 
   /** Marca de mensaje SALIENTE (operador o bot). */
   outgoingMessageMarker: ['.text-entry-right'],
+
+  /** Dentro de una burbuja saliente: la escribio una persona, no el bot. */
+  humanMessageMarker: ['.entries-li-sentby.from-human'],
+
+  /** Solo el texto del mensaje, sin el nombre de quien lo envio. */
+  messageText: ['.rule-message-all-container', '.inline-text'],
 
   /** Contenedor del texto dentro de una burbuja. */
   messageBody: ['.render-text-message-body', '.inline-text'],

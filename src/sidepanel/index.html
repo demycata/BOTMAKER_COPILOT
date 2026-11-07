@@ -63,6 +63,22 @@
         </div>
       </section>
 
+      <!-- Posponer todo -->
+      <section class="card">
+        <div class="card-head"><h2>Posponer todo</h2></div>
+        <p class="hint">
+          Busca en la lista actual los chats cuyo ultimo mensaje es este saludo, sin
+          abrirlos, y te pide confirmacion antes de posponerlos 4 horas.
+        </p>
+        <div class="field">
+          <label for="postpone-greeting">Saludo</label>
+          <textarea id="postpone-greeting" class="textarea" rows="2">Hola, soy Demian del Equipo de Dental, ¿En qué puedo ayudarte?</textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="postpone-all">Posponer todo</button>
+        </div>
+      </section>
+
       <!-- Reglas -->
       <section class="card">
         <div class="card-head">
@@ -122,6 +138,18 @@
         <ul class="log" id="log"></ul>
       </section>
     </main>
+
+    <div class="modal hidden" id="postpone-modal" role="dialog" aria-modal="true" aria-labelledby="postpone-title">
+      <div class="modal-box">
+        <h2 class="modal-title" id="postpone-title"></h2>
+        <p class="hint" id="postpone-note"></p>
+        <ul class="modal-list" id="postpone-list"></ul>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="postpone-confirm">Posponer</button>
+          <button class="btn" id="postpone-cancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
 
     <script src="./main.js"></script>
   </body>

@@ -31,11 +31,21 @@ const ruleMatch = $<HTMLInputElement>('rule-match');
 const ruleReply = $<HTMLTextAreaElement>('rule-reply');
 const ruleAutosend = $<HTMLInputElement>('rule-autosend');
 const saveRuleBtn = $<HTMLButtonElement>('save-rule');
+const postponeGreeting = $<HTMLTextAreaElement>('postpone-greeting');
+const postponeAllBtn = $<HTMLButtonElement>('postpone-all');
+const postponeModal = $('postpone-modal');
+const postponeTitle = $('postpone-title');
+const postponeNote = $('postpone-note');
+const postponeList = $<HTMLUListElement>('postpone-list');
+const postponeConfirmBtn = $<HTMLButtonElement>('postpone-confirm');
+const postponeCancelBtn = $<HTMLButtonElement>('postpone-cancel');
 const runDiagBtn = $<HTMLButtonElement>('run-diag');
 const logEl = $<HTMLUListElement>('log');
 
 /** Pestania donde corre el lote: cancelar debe llegar ahi aunque cambies de pestania. */
 let bulkTabId: number | undefined;
+/** Pestania que hizo la busqueda de "Posponer todo". */
+let postponeTabId: number | undefined;
 let diagTimer: number | undefined;
 
 // --- Seleccion ---
@@ -59,9 +69,10 @@ actionSelect.addEventListener('change', () => {
   postponeSelect.classList.toggle('hidden', actionSelect.value !== 'postpone');
 });
 
-function setBulkRunning(running: boolean): void {
+function setBulkRunning(running: boolean, cancellable = running): void {
   runBulkBtn.disabled = running;
-  cancelBulkBtn.disabled = !running;
+  postponeAllBtn.disabled = running;
+  cancelBulkBtn.disabled = !cancellable;
 }
 
 runBulkBtn.addEventListener('click', async () => {
@@ -90,6 +101,68 @@ runBulkBtn.addEventListener('click', async () => {
 cancelBulkBtn.addEventListener('click', async () => {
   const sent = await sendToContent({ kind: 'bulk:cancel' }, bulkTabId);
   addLog(sent ? 'Cancelando lote…' : 'No pude cancelar: se perdio la pestania.', sent ? '' : 'fail');
+});
+
+// --- Posponer todo ---
+const POSTPONE_ALL_DURATION = '4h';
+
+postponeAllBtn.addEventListener('click', async () => {
+  const greeting = postponeGreeting.value.trim();
+  if (!greeting) {
+    addLog('Escribi el saludo a buscar.', 'fail');
+    return;
+  }
+  await set('postponeGreeting', greeting);
+  setBulkRunning(true, false);
+  addLog('Buscando chats con tu saludo…');
+  if (!(await sendToContent({ kind: 'postpone:scan', greeting }))) {
+    setBulkRunning(false);
+    addLog(NOT_CONNECTED, 'fail');
+  }
+});
+
+function showPostponePreview(names: string[], total: number, complete: boolean): void {
+  setBulkRunning(false);
+  if (!names.length) {
+    addLog(`Ninguno de los ${total} chats tiene tu saludo como ultimo mensaje.`);
+    return;
+  }
+  postponeTitle.textContent = `Posponer ${names.length} de ${total} chats`;
+  postponeNote.textContent = complete
+    ? 'Su ultimo mensaje es tu saludo. Se pospondran 4 horas.'
+    : 'Su ultimo mensaje es tu saludo. Se pospondran 4 horas. La lista es muy larga: puede haber mas.';
+  postponeList.replaceChildren(
+    ...names.map((name) => {
+      const li = document.createElement('li');
+      li.textContent = name;
+      return li;
+    }),
+  );
+  postponeModal.classList.remove('hidden');
+  postponeCancelBtn.focus();
+}
+
+function hidePostponeModal(): void {
+  postponeModal.classList.add('hidden');
+}
+
+postponeConfirmBtn.addEventListener('click', async () => {
+  hidePostponeModal();
+  setBulkRunning(true);
+  progressBox.classList.remove('hidden');
+  progressFill.style.width = '0%';
+  progressLabel.textContent = '';
+  const postponePath = POSTPONE_PATHS[POSTPONE_ALL_DURATION];
+  if (!(await sendToContent({ kind: 'postpone:confirm', postponePath }, postponeTabId))) {
+    setBulkRunning(false);
+    addLog(NOT_CONNECTED, 'fail');
+  }
+});
+
+postponeCancelBtn.addEventListener('click', () => {
+  hidePostponeModal();
+  void sendToContent({ kind: 'postpone:discard' }, postponeTabId);
+  addLog('Posponer todo: cancelado, no se toco ningun chat.');
 });
 
 // --- Atajos ---
@@ -215,6 +288,10 @@ chrome.runtime.onMessage.addListener((envelope: Envelope, sender) => {
       bulkTabId = msg.progress.finished ? undefined : sender.tab?.id;
       paintProgress(msg.progress);
       break;
+    case 'postpone:preview':
+      postponeTabId = sender.tab?.id;
+      showPostponePreview(msg.names, msg.total, msg.complete);
+      break;
     case 'bulk:rejected':
       setBulkRunning(false);
       progressBox.classList.add('hidden');
@@ -242,10 +319,14 @@ function paintProgress(p: BulkProgress): void {
   progressFill.style.width = `${pct}%`;
   if (p.finished) {
     const title = p.cancelled ? 'Cancelado' : 'Listo';
-    progressLabel.textContent = `${title}: ${p.done - p.failed} ok, ${p.failed} con error de ${p.total}.`;
+    const skipped = p.skipped ? `, ${p.skipped} salteados` : '';
+    const ok = p.done - p.failed - p.skipped;
+    progressLabel.textContent = `${title}: ${ok} ok${skipped}, ${p.failed} con error de ${p.total}.`;
     setBulkRunning(false);
-    // Volcar errores al log.
-    p.results.filter((r) => !r.ok).forEach((r) => addLog(`${r.chatName}: ${r.error}`, 'fail'));
+    // Volcar al log lo que no se hizo.
+    p.results
+      .filter((r) => !r.ok)
+      .forEach((r) => addLog(`${r.chatName}: ${r.error}`, r.skipped ? '' : 'fail'));
   } else {
     progressLabel.textContent = `Procesando ${p.done}/${p.total}${p.currentChatName ? ` — ${p.currentChatName}` : ''}`;
   }
@@ -277,11 +358,13 @@ async function connectToTab(): Promise<void> {
 chrome.tabs.onActivated.addListener(() => void connectToTab());
 
 (async function init() {
-  const [rules, rulesEnabled, shortcuts] = await Promise.all([
+  const [rules, rulesEnabled, shortcuts, greeting] = await Promise.all([
     get('rules'),
     get('rulesEnabled'),
     get('shortcuts'),
+    get('postponeGreeting'),
   ]);
+  if (greeting) postponeGreeting.value = greeting;
   rulesToggle.checked = rulesEnabled;
   if (rules[0]) {
     ruleMatch.value = rules[0].match.value;

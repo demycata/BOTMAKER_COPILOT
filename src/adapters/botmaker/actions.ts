@@ -8,7 +8,7 @@
 // actuar se confirma que la conversacion abierta es la correcta.
 
 import type { BulkActionId, BulkActionParams, ChatRef } from '@/types';
-import { normalize } from '@/core/text';
+import { normalize, startsWithText } from '@/core/text';
 import { SELECTORS, MENU_ITEMS } from './selectors';
 import {
   cleanText,
@@ -50,7 +50,14 @@ export function listChats(): ChatRef[] {
       const nameEl = queryFirst<HTMLElement>(SELECTORS.chatName, row);
       const name = (nameEl?.textContent ?? '').trim().slice(0, 80) || '(sin nombre)';
       const top = parseFloat(row.style.top);
-      return { id: row.id, name, el: row, offset: Number.isFinite(top) ? top : row.offsetTop };
+      const preview = queryFirst<HTMLElement>(SELECTORS.chatLastMessage, row);
+      return {
+        id: row.id,
+        name,
+        el: row,
+        offset: Number.isFinite(top) ? top : row.offsetTop,
+        lastMessage: preview ? cleanText(preview) : undefined,
+      };
     });
 }
 
@@ -202,6 +209,16 @@ export function lastBubbleIsIncoming(): boolean {
   const bubbles = document.querySelectorAll(anyOf(SELECTORS.messageItem));
   const last = bubbles[bubbles.length - 1];
   return !!last?.matches(anyOf(SELECTORS.incomingMessageMarker));
+}
+
+/** True si lo ultimo del hilo es un mensaje del operador que empieza con `text`. */
+export function lastMessageIsOperatorText(text: string): boolean {
+  const bubbles = document.querySelectorAll<HTMLElement>(anyOf(SELECTORS.messageItem));
+  const last = bubbles[bubbles.length - 1];
+  if (!last?.matches(anyOf(SELECTORS.outgoingMessageMarker))) return false;
+  if (!queryFirst(SELECTORS.humanMessageMarker, last)) return false;
+  const body = queryFirst<HTMLElement>(SELECTORS.messageText, last);
+  return !!body && startsWithText(cleanText(body), text);
 }
 
 /** Textos de los mensajes SALIENTES (operador/bot) de la conversacion abierta. */

@@ -48,6 +48,10 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 - **Acciones masivas**: Liberar, Posponer, Cerrar (consulta resuelta) y Enviar
   mensaje. Los chats que salen bien se desmarcan; los que fallan quedan
   seleccionados para reintentar.
+- **Posponer todo** busca en la lista actual los chats cuyo ultimo mensaje empieza
+  con tu saludo, sin abrirlos, y muestra cuales encontro. Al confirmar los pospone
+  4 horas, verificando antes en cada chat que lo ultimo siga siendo ese saludo y
+  que lo haya escrito una persona. Si el cliente respondio, lo saltea.
 - **Regla** "si el mensaje contiene X, responder Y", que deja el texto escrito o
   lo envia segun el toggle. Funciona con el panel cerrado y tras recargar.
 - **Atajos** para liberar, posponer y cerrar la conversacion abierta.
@@ -61,8 +65,8 @@ probar en Botmaker: si Botmaker cambia su HTML, los tests siguen pasando.
 - Una regla nunca pisa un borrador del operador. Tampoco corre durante una accion
   masiva, ni repite una respuesta que ya figura en el chat.
 - Si ya hay mensajes despues del cliente, una regla con auto-envio deja el texto
-  escrito en vez de enviarlo: el chat puede estar ya atendido. Los selectores
-  actuales no distinguen si esos mensajes son de un operador o del bot.
+  escrito en vez de enviarlo: el chat puede estar ya atendido, y esta comprobacion
+  no distingue mensajes de operador y de bot.
 - Una accion cuenta como exitosa solo si se ve su efecto: el cuadro de texto se
   vacia al enviar, y el menu o el dialogo se cierran al liberar, posponer o cerrar.
 
